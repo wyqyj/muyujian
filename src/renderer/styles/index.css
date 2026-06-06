@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* CodeMirror 编辑器深色模式 */
+.dark .cm-editor { background: #0d1117 !important; color: #c9d1d9 !important; }
+.dark .cm-editor .cm-content { color: #c9d1d9 !important; caret-color: #58a6ff !important; }
+.dark .cm-editor .cm-gutters { background: #0d1117 !important; color: #484f58 !important; border-color: #21262d !important; }
+.dark .cm-editor .cm-activeLineGutter { background: rgba(56,139,253,0.1) !important; color: #c9d1d9 !important; }
+.dark .cm-editor .cm-activeLine { background: rgba(56,139,253,0.05) !important; }
+.dark .cm-editor .cm-selectionBackground { background: rgba(56,139,253,0.2) !important; }
+.dark .cm-editor.cm-focused .cm-selectionBackground { background: rgba(56,139,253,0.3) !important; }
+.dark .cm-editor .cm-cursor { border-left-color: #58a6ff !important; }
+.dark .cm-editor .cm-matchingBracket { background: rgba(56,139,253,0.25) !important; color: #c9d1d9 !important; }
+.dark .cm-editor .cm-line { color: #c9d1d9 !important; }
+.dark .cm-editor .ͼb { color: #ff7b72 !important; } /* keyword */
+.dark .cm-editor .ͼc { color: #79c0ff !important; } /* comment */
+.dark .cm-editor .ͼd { color: #a5d6ff !important; } /* string */
+.dark .cm-editor .ͼe { color: #79c0ff !important; } /* number */
+.dark .cm-editor .ͼi { color: #d2a8ff !important; } /* function */
+.dark .cm-editor .ͼl { color: #ffa657 !important; } /* type */
+.dark .cm-editor .ͼm { color: #7ee787 !important; } /* variable */
+.dark .cm-editor .ͼ7 { color: #79c0ff !important; } /* property */
+.dark .cm-editor .ͼt { color: #ff7b72 !important; } /* operator */
+
+/* 代码高亮 */
+.hljs {
+  background: #f1f5f9 !important;
+  border-radius: 8px;
+  padding: 14px;
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+}
+.dark .hljs { background: #1e1e2e !important; border-color: #2d2d3f; color: #c9d1d9 !important; }
+.dark .hljs-keyword { color: #ff7b72 !important; }
+.dark .hljs-string { color: #a5d6ff !important; }
+.dark .hljs-comment { color: #8b949e !important; }
+.dark .hljs-number { color: #79c0ff !important; }
+.dark .hljs-function { color: #d2a8ff !important; }
+.dark .hljs-title { color: #d2a8ff !important; }
+.dark .hljs-params { color: #c9d1d9 !important; }
+.dark .hljs-built_in { color: #ffa657 !important; }
+.dark .hljs-type { color: #ffa657 !important; }
+.dark .hljs-attr { color: #79c0ff !important; }
+.dark .hljs-variable { color: #ffa657 !important; }
+.dark .hljs-literal { color: #79c0ff !important; }
+.dark .hljs-template-tag { color: #ff7b72 !important; }
+.dark .hljs-template-variable { color: #ffa657 !important; }
+.dark .hljs-regexp { color: #a5d6ff !important; }
+.dark .hljs-symbol { color: #79c0ff !important; }
+.dark .hljs-selector-class { color: #7ee787 !important; }
+.dark .hljs-selector-tag { color: #7ee787 !important; }
+.dark .hljs-selector-id { color: #d2a8ff !important; }
+.dark .hljs-meta { color: #8b949e !important; }
+.dark .hljs-section { color: #79c0ff !important; font-weight: bold; }
+.dark .hljs-addition { color: #aff5b4 !important; background: #033a16 !important; }
+.dark .hljs-deletion { color: #ffdcd7 !important; background: #67060c !important; }
+.dark .hljs-emphasis { font-style: italic; color: #c9d1d9 !important; }
+.dark .hljs-strong { font-weight: bold; color: #c9d1d9 !important; }
+.dark .hljs-link { color: #a5d6ff !important; text-decoration: underline; }
+
+/* KaTeX */
+.katex-block { overflow-x: auto; padding: 8px 0; text-align: center; }
+.katex-error { color: #ef4444; font-family: monospace; }
+
+/* 任务列表 */
+.prose ul li { list-style-type: none; }
+.prose ul li input[type="checkbox"] { margin-right: 8px; cursor: pointer; accent-color: #6366f1; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background-color: rgba(99,102,241,0.15); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(99,102,241,0.3); }
+.dark ::-webkit-scrollbar-thumb { background-color: rgba(99,102,241,0.2); }
+.dark ::-webkit-scrollbar-thumb:hover { background-color: rgba(99,102,241,0.35); }
+
+/* 工具栏按钮 */
+.toolbar-btn {
+  @apply p-1.5 rounded-md text-gray-400 transition-all;
+}
+.toolbar-btn:hover {
+  @apply bg-indigo-50 text-indigo-500;
+}
+.dark .toolbar-btn:hover {
+  @apply bg-gray-700 text-indigo-400;
+}
+
+/* Markdown 预览 */
+.prose h1 { @apply text-2xl font-bold mb-4 mt-6 text-gray-800 dark:text-gray-100 tracking-wide; }
+.prose h2 { @apply text-xl font-semibold mb-3 mt-5 text-gray-800 dark:text-gray-100; }
+.prose h3 { @apply text-lg font-semibold mb-2 mt-4 text-gray-800 dark:text-gray-100; }
+.prose p { @apply mb-3 text-gray-600 dark:text-gray-300 leading-relaxed; }
+.prose a { @apply text-indigo-500 hover:text-indigo-600 underline decoration-indigo-200 hover:decoration-indigo-400 transition-colors; }
+.prose code { @apply bg-slate-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono text-indigo-600 dark:text-indigo-400; }
+.prose pre { @apply rounded-lg overflow-x-auto border border-slate-200 dark:border-gray-700; }
+.prose pre code { @apply bg-transparent p-0 text-gray-700 dark:text-gray-200; }
+.prose blockquote { @apply border-l-4 border-indigo-200 dark:border-indigo-800 pl-4 italic text-gray-500 dark:text-gray-400 bg-indigo-50/30 dark:bg-gray-800/30 py-1 rounded-r-lg; }
+.prose table { @apply w-full border-collapse; }
+.prose th { @apply bg-slate-50 dark:bg-gray-800 px-3 py-2 text-left font-medium border border-slate-200 dark:border-gray-700; }
+.prose td { @apply px-3 py-2 border border-slate-200 dark:border-gray-700; }
+.prose hr { @apply border-slate-200 dark:border-gray-700 my-6; }
+.prose img { @apply max-w-full rounded-lg shadow-sm; }
+.prose ul { @apply list-disc pl-6 mb-3; }
+.prose ol { @apply list-decimal pl-6 mb-3; }
+.dark .prose code { color: #a5b4fc !important; }
+.dark .prose pre code { color: #c9d1d9 !important; }
+.dark .prose li { color: #d1d5db !important; }
+.dark .prose strong { color: #e5e7eb !important; }
+.dark .prose em { color: #d1d5db !important; }
+.dark .prose td { color: #d1d5db !important; }
+.dark .prose th { color: #e5e7eb !important; }
+.dark .prose blockquote p { color: #9ca3af !important; }
+
+/* 动画 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.2s ease-in-out; }
+
+/* DatePicker 暮雨主题 */
+.react-datepicker-wrapper { width: 100%; }
+.react-datepicker { font-family: inherit !important; border: 1px solid rgba(99,102,241,0.15) !important; border-radius: 12px !important; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important; }
+.react-datepicker__header { background: linear-gradient(135deg, #eef2ff, #e0e7ff) !important; border-bottom: 1px solid rgba(99,102,241,0.1) !important; padding-top: 10px !important; }
+.react-datepicker__current-month { font-weight: 600 !important; color: #4338ca !important; font-size: 14px !important; }
+.react-datepicker__day-name { color: #4f46e5 !important; font-weight: 500 !important; font-size: 12px !important; }
+.react-datepicker__day { border-radius: 8px !important; font-size: 13px !important; }
+.react-datepicker__day:hover { background-color: #e0e7ff !important; color: #4338ca !important; }
+.react-datepicker__day--selected { background-color: #6366f1 !important; color: white !important; font-weight: 600 !important; }
+.react-datepicker__day--today { color: #6366f1 !important; font-weight: 700 !important; }
+.react-datepicker__day--keyboard-selected { background-color: #6366f1 !important; color: white !important; }
+.react-datepicker__time-container { border-left: 1px solid rgba(99,102,241,0.1) !important; }
+.react-datepicker-time__header { color: #4338ca !important; font-weight: 600 !important; }
+.react-datepicker__time-list-item:hover { background-color: #e0e7ff !important; color: #4338ca !important; }
+.react-datepicker__time-list-item--selected { background-color: #6366f1 !important; color: white !important; }
+.react-datepicker__triangle { display: none !important; }
+
+.dark .react-datepicker { background-color: #1f2937 !important; border-color: rgba(99,102,241,0.2) !important; }
+.dark .react-datepicker__header { background: linear-gradient(135deg, #1f2937, #374151) !important; border-bottom-color: rgba(99,102,241,0.1) !important; }
+.dark .react-datepicker__current-month { color: #a5b4fc !important; }
+.dark .react-datepicker__day-name { color: #818cf8 !important; }
+.dark .react-datepicker__day { color: #d1d5db !important; }
+.dark .react-datepicker__day:hover { background-color: #374151 !important; color: #a5b4fc !important; }
+.dark .react-datepicker__day--selected { background-color: #6366f1 !important; color: white !important; }
+.dark .react-datepicker__day--today { color: #6366f1 !important; }
+.dark .react-datepicker-time__header { color: #a5b4fc !important; }
+.dark .react-datepicker__time-list-item { color: #d1d5db !important; }
+.dark .react-datepicker__time-list-item:hover { background-color: #374151 !important; color: #a5b4fc !important; }
+.dark .react-datepicker__time-list-item--selected { background-color: #6366f1 !important; color: white !important; }
+.dark .react-datepicker__time-container { border-left-color: rgba(99,102,241,0.1) !important; }
