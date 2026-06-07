@@ -16,27 +16,25 @@ interface SettingsStore {
   toggleTextMode: () => void;
 }
 
+const defaultSettings: Settings = { theme: 'light', textMode: 'modern', quickNoteShortcut: 'Alt+Q', autoSaveInterval: 60 };
+
 function loadSettings(): Settings {
+  // 优先从 electron-store 加载（主进程），否则从 localStorage
   try {
     const data = localStorage.getItem('lingxi-settings');
     const parsed = data ? JSON.parse(data) : {};
-    return {
-      theme: parsed.theme || 'light',
-      textMode: parsed.textMode || 'modern',
-      quickNoteShortcut: parsed.quickNoteShortcut || 'Alt+Q',
-      autoSaveInterval: parsed.autoSaveInterval || 60,
-    };
-  } catch {
-    return { theme: 'light', textMode: 'modern', quickNoteShortcut: 'Alt+Q', autoSaveInterval: 60 };
-  }
+    return { theme: parsed.theme || defaultSettings.theme, textMode: parsed.textMode || defaultSettings.textMode,
+      quickNoteShortcut: parsed.quickNoteShortcut || defaultSettings.quickNoteShortcut,
+      autoSaveInterval: parsed.autoSaveInterval || defaultSettings.autoSaveInterval };
+  } catch { return defaultSettings; }
 }
 
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function saveSettings(settings: Settings): void {
-  try {
-    localStorage.setItem('lingxi-settings', JSON.stringify(settings));
-  } catch (err) {
-    console.error('保存设置失败:', err);
-  }
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem('lingxi-settings', JSON.stringify(settings)); } catch {}
+  }, 300);
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -52,6 +50,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       window.electronAPI.saveSettings(updated);
       if (updated.theme !== prev.theme) {
         window.electronAPI.updateTheme(updated.theme);
+        document.documentElement.classList.toggle('dark', updated.theme === 'dark');
       }
     }
   },

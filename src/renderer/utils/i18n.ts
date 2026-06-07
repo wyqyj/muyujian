@@ -76,7 +76,7 @@ export const texts = {
   classical: {
     appName: '暮雨笺',
     newNote: '新笺',
-    search: '搜寻花笺…',
+    search: '检索花笺…',
     all: '尽览',
     todayPlan: '今日要务',
     archive: '归匣',
@@ -120,7 +120,7 @@ export const texts = {
     saveAsNote: '存为花笺',
     charCount: '字',
     autoSaving: '自动存笺中',
-    quickNotePlaceholder: '速笔一记…\n\n兼容 Markdown 与 LaTeX 算学公式',
+    quickNotePlaceholder: '速笔小记…\n\n兼容 Markdown 与 LaTeX 算学公式',
     themeLight: '日间模式',
     themeDark: '夜阑模式',
     switchToDark: '切换至夜阑',

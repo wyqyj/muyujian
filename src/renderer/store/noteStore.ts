@@ -18,7 +18,6 @@ interface NoteStore {
   searchQuery: string;
   filterTag: string | null;
   showTodayPlan: boolean;
-  showArchived: boolean;
   loaded: boolean;
 
   setNotes: (notes: Note[]) => void;
@@ -30,20 +29,36 @@ interface NoteStore {
   setSearchQuery: (query: string) => void;
   setFilterTag: (tag: string | null) => void;
   setShowTodayPlan: (show: boolean) => void;
-  setShowArchived: (show: boolean) => void;
   loadNotes: () => Promise<void>;
-  getFilteredNotes: () => Note[];
   getTodayPlanNotes: () => Note[];
+  selectNote: (id: string) => void;
 }
 
-// 保存到主进程（文件）
+// 防抖保存（带脏检查，防止 reload→save 循环）
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSavedJson = '';
+let reloading = false;
 function saveToDisk(notes: Note[]): void {
-  if (window.electronAPI) {
-    window.electronAPI.saveNotes(JSON.stringify(notes, null, 2));
-  } else {
-    // 开发环境 fallback
-    try { localStorage.setItem('lingxi-notes', JSON.stringify(notes)); } catch {}
-  }
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    if (reloading) return; // 正在从磁盘重载，跳过保存防止覆盖
+    const json = JSON.stringify(notes, null, 2);
+    if (json === lastSavedJson) return; // 数据未变化，跳过保存
+    lastSavedJson = json;
+    if (window.electronAPI) {
+      window.electronAPI.saveNotes(json);
+    } else {
+      try { localStorage.setItem('lingxi-notes', json); } catch {}
+    }
+  }, 300);
+}
+
+/** 校验笔记数据结构 */
+export function validateNotes(data: any[]): Note[] {
+  if (!Array.isArray(data)) return [];
+  return data.filter((n): n is Note =>
+    n && typeof n.id === 'string' && typeof n.title === 'string' && typeof n.content === 'string'
+  );
 }
 
 export const useNoteStore = create<NoteStore>((set, get) => ({
@@ -52,7 +67,6 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   searchQuery: '',
   filterTag: null,
   showTodayPlan: false,
-  showArchived: false,
   loaded: false,
 
   loadNotes: async () => {
@@ -60,14 +74,16 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     if (window.electronAPI) {
       try {
         const data = await window.electronAPI.getNotes();
-        notes = JSON.parse(data);
+        const parsed = JSON.parse(data);
+        notes = validateNotes(parsed);
       } catch { notes = []; }
     } else {
       try {
         const data = localStorage.getItem('lingxi-notes');
-        notes = data ? JSON.parse(data) : [];
+        notes = data ? validateNotes(JSON.parse(data)) : [];
       } catch { notes = []; }
     }
+    lastSavedJson = JSON.stringify(notes, null, 2);
     set({ notes, loaded: true });
   },
 
@@ -100,20 +116,30 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   setSearchQuery: (query) => set({ searchQuery: query }),
   setFilterTag: (tag) => set({ filterTag: tag }),
   setShowTodayPlan: (show) => set({ showTodayPlan: show }),
-  setShowArchived: (show) => set({ showArchived: show }),
-
-  getFilteredNotes: () => {
-    const { notes, searchQuery, filterTag, showArchived } = get();
-    return notes.filter((note) => {
-      if (note.isArchived !== showArchived) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        if (!note.title.toLowerCase().includes(q) && !note.content.toLowerCase().includes(q)) return false;
-      }
-      if (filterTag && !note.tags.includes(filterTag)) return false;
-      return true;
-    });
-  },
 
   getTodayPlanNotes: () => get().notes.filter((n) => n.isTodayPlan && !n.isArchived),
+
+  selectNote: (id) => {
+    const exists = get().notes.some((n) => n.id === id);
+    if (exists) set({ activeNoteId: id, showTodayPlan: false });
+  },
 }));
+
+// 注册跨窗口笔记重载监听（延迟注册，避免被 Vite tree-shake）
+export function registerReloadListener(): void {
+  if (!window.electronAPI?.onReloadNotes) return;
+  window.electronAPI.onReloadNotes(async () => {
+    if (!window.electronAPI) return;
+    // 取消待保存操作，防止覆盖从其他窗口写入的数据
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    reloading = true;
+    try {
+      const data = await window.electronAPI.getNotes();
+      const notes = validateNotes(JSON.parse(data));
+      lastSavedJson = JSON.stringify(notes, null, 2);
+      useNoteStore.setState({ notes });
+    } catch {} finally {
+      reloading = false;
+    }
+  });
+}

@@ -21,14 +21,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleTodayPlanWindow: () => ipcRenderer.send('toggle-today-plan-window'),
   closeTodayPlanWindow: () => ipcRenderer.send('close-today-plan-window'),
   minimizeTodayPlanWindow: () => ipcRenderer.send('minimize-today-plan-window'),
+  // 透明度
+  setOpacity: (opacity: number) => ipcRenderer.send('set-opacity', opacity),
+  getOpacity: () => ipcRenderer.invoke('get-opacity'),
   // 便签数据
   getNotes: () => ipcRenderer.invoke('get-notes'),
-  saveNotes: (notes: string) => ipcRenderer.send('save-notes', notes),
+  saveNotes: (notes: string) => ipcRenderer.invoke('save-notes', notes),
+  createQuickNote: (noteJson: string) => ipcRenderer.invoke('create-quick-note', noteJson),
+  updateQuickNoteContent: (noteId: string, content: string) => ipcRenderer.invoke('update-quick-note-content', noteId, content),
+  updateQuickNote: (noteId: string, updates: string) => ipcRenderer.invoke('update-quick-note', noteId, updates),
   getDataPath: () => ipcRenderer.invoke('get-data-path'),
+  // 笔记重载监听（跨窗口同步）
+  onReloadNotes: (callback: () => void) => ipcRenderer.on('reload-notes', callback),
+  // 快速笔记关闭前保存
+  onSaveBeforeClose: (callback: () => void) => ipcRenderer.on('save-before-close', callback),
+  // 菜单事件监听
+  onNewNote: (callback: () => void) => ipcRenderer.on('new-note', callback),
+  onExportData: (callback: () => void) => ipcRenderer.on('export-data', callback),
+  onImportData: (callback: () => void) => ipcRenderer.on('import-data', callback),
   // 数据导入导出
   exportData: () => ipcRenderer.invoke('export-data'),
   importData: (data: string) => ipcRenderer.send('import-data', data),
-  // 导出为文档
-  exportPdf: (title: string, html: string) => ipcRenderer.invoke('export-pdf', title, html),
-  exportWord: (title: string, html: string) => ipcRenderer.invoke('export-word', title, html),
+  // 导出为 Word（通过 pandoc 编译原始内容）
+  exportWord: (title: string, content: string) => ipcRenderer.invoke('export-word', title, content),
+  // 导出为 PDF（通过 pandoc + xelatex，需要用户已安装 LaTeX）
+  exportPdf: (title: string, content: string) => ipcRenderer.invoke('export-pdf', title, content),
+  // Pandoc 编译
+  pandocCompile: (source: string, fromFormat?: string) => ipcRenderer.invoke('pandoc-compile', source, fromFormat),
+  // 命令主窗口重载笔记
+  reloadNotesFromDisk: () => ipcRenderer.send('reload-notes-from-disk'),
+  // 通知主窗口选中指定便签
+  selectNote: (noteId: string) => ipcRenderer.send('select-note', noteId),
+  onSelectNote: (callback: (noteId: string) => void) => ipcRenderer.on('select-note', (_e, noteId) => callback(noteId)),
 });

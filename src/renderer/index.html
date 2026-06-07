@@ -3,11 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net data:; img-src 'self' data:;" />
   <title>暮雨笺</title>
   <link rel="icon" type="image/svg+xml" href="/assets/icon.svg" />
+  <!-- MathJax 3：渲染 Pandoc 输出的数学公式 -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+      options: { processHtmlClass: 'math', skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
 </head>
 <body class="bg-white dark:bg-gray-900">
+  <script>
+    // 深色主题初始化：防止闪烁
+    try {
+      var s = JSON.parse(localStorage.getItem('lingxi-settings') || '{}');
+      if (s.theme === 'dark') document.documentElement.classList.add('dark');
+    } catch(e) {}
+  </script>
   <div id="root"></div>
   <script type="module" src="./index.tsx"></script>
 </body>

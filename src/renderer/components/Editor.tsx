@@ -195,6 +195,8 @@ export const Editor: React.FC = () => {
     });
 
     viewRef.current = new EditorView({ state, parent: editorRef.current });
+    // 自动聚焦编辑器
+    requestAnimationFrame(() => { viewRef.current?.focus(); });
     return () => { viewRef.current?.destroy(); };
   }, [activeNoteId]);
 
@@ -255,7 +257,8 @@ export const Editor: React.FC = () => {
 
       {/* 编辑器（支持拖拽图片） */}
       <div ref={editorRef} className="flex-1 overflow-hidden"
-        onDrop={handleDrop} onDragOver={handleDragOver} />
+        onDrop={handleDrop} onDragOver={handleDragOver}
+        onMouseDown={() => { viewRef.current?.focus(); }} />
     </div>
   );
 };

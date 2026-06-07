@@ -97,9 +97,11 @@ export const Sidebar: React.FC = () => {
   const archivedNotes = notes.filter((n) => n.isArchived);
 
   const filteredNotes = notes.filter((note) => {
-    if (sideSection === 'today') return note.isTodayPlan && !note.isArchived;
-    if (sideSection === 'archived') return note.isArchived;
-    if (note.isArchived) return false;
+    if (sideSection === 'today' && !note.isTodayPlan) return false;
+    if (sideSection === 'today' && note.isArchived) return false;
+    if (sideSection === 'archived' && !note.isArchived) return false;
+    if (sideSection === 'all' && note.isArchived) return false;
+    // 搜索在所有视图下生效
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       if (!note.title.toLowerCase().includes(q) && !note.content.toLowerCase().includes(q)) return false;

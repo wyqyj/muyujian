@@ -21,6 +21,7 @@
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.35.3",
     "@lezer/highlight": "^1.2.1",
+    "@tailwindcss/typography": "^0.5.19",
     "codemirror": "^6.0.1",
     "electron-store": "^8.2.0",
     "highlight.js": "^11.11.1",
@@ -58,6 +59,15 @@
     "files": [
       "dist/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/pandoc/",
+        "to": "pandoc/",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
       "target": "nsis"

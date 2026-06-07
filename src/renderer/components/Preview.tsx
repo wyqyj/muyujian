@@ -1,18 +1,87 @@
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useNoteStore } from '../store/noteStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { renderMarkdown, toggleTaskCheckbox } from '../utils/markdown';
+
+type SourceFormat = 'auto' | 'markdown' | 'latex' | 'rst' | 'html';
+
+const FORMAT_OPTIONS: { value: SourceFormat; label: string }[] = [
+  { value: 'auto', label: '自动检测' },
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'latex', label: 'LaTeX' },
+  { value: 'rst', label: 'reStructuredText' },
+  { value: 'html', label: 'HTML' },
+];
+
+function isLatexDocument(text: string): boolean {
+  if (/\\documentclass/.test(text) || /\\begin\{document\}/.test(text)) return true;
+  if (/\\\[[\s\S]*?\\\]/.test(text)) return true;
+  if (/\\\([\s\S]*?\\\)/.test(text)) return true;
+  if (/\\begin\{(equation|align|gather|eqnarray)\*?\}/.test(text)) return true;
+  return false;
+}
+
+function wrapLatexFragment(text: string): string {
+  if (/\\documentclass/.test(text) || /\\begin\{document\}/.test(text)) return text;
+  return `\\documentclass[12pt]{article}\n\\usepackage{amsmath,amssymb}\n\\begin{document}\n${text}\n\\end{document}`;
+}
 
 export const Preview: React.FC = () => {
   const { notes, activeNoteId, updateNote } = useNoteStore();
   const { t } = useSettingsStore();
   const activeNote = notes.find((n) => n.id === activeNoteId);
   const [exporting, setExporting] = useState(false);
+  const [compiling, setCompiling] = useState(false);
+  const [html, setHtml] = useState('');
+  const [sourceFormat, setSourceFormat] = useState<SourceFormat>('auto');
+  const compileIdRef = useRef(0);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  const html = useMemo(() => {
-    if (!activeNote) return '';
-    return renderMarkdown(activeNote.content);
-  }, [activeNote?.content]);
+  useEffect(() => {
+    if (!activeNote) { setHtml(''); return; }
+
+    const content = activeNote.content;
+    const id = ++compileIdRef.current;
+
+    // 判断是否需要 Pandoc
+    const usePandoc = sourceFormat === 'latex' || sourceFormat === 'rst' || sourceFormat === 'html'
+      || (sourceFormat === 'auto' && isLatexDocument(content));
+
+    if (usePandoc && window.electronAPI) {
+      setCompiling(true);
+      const pandocFormat = sourceFormat === 'auto' ? 'latex' : sourceFormat;
+      const source = pandocFormat === 'latex' ? wrapLatexFragment(content) : content;
+      window.electronAPI.pandocCompile(source, pandocFormat).then((result) => {
+        if (compileIdRef.current !== id) return;
+        if (result.success && result.html) {
+          setHtml(result.html);
+        } else {
+          setHtml(renderMarkdown(content));
+        }
+        setCompiling(false);
+      }).catch(() => {
+        if (compileIdRef.current !== id) return;
+        setHtml(renderMarkdown(content));
+        setCompiling(false);
+      });
+    } else {
+      setHtml(renderMarkdown(content));
+    }
+  }, [activeNote?.content, activeNoteId, sourceFormat]);
+
+  // MathJax 渲染：每次 HTML 更新后触发 MathJax 处理公式
+  useEffect(() => {
+    if (!html) return;
+    // 等待 DOM 更新后再触发 MathJax
+    requestAnimationFrame(() => {
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        const el = contentRef.current;
+        if (el) {
+          window.MathJax.typesetPromise([el]).catch(() => {});
+        }
+      }
+    });
+  }, [html]);
 
   const handleContentClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -39,22 +108,30 @@ export const Preview: React.FC = () => {
       }
     }, [activeNote, activeNoteId, updateNote]);
 
-  const handleExportPdf = async () => {
-    if (!activeNote || !window.electronAPI) return;
-    setExporting(true);
-    const result = await window.electronAPI.exportPdf(activeNote.title, html);
-    setExporting(false);
-    if (result.success) alert(`已导出为 PDF：${result.path}`);
-    else if (result.error !== 'cancelled') alert(`导出失败：${result.error}`);
-  };
-
   const handleExportWord = async () => {
     if (!activeNote || !window.electronAPI) return;
     setExporting(true);
-    const result = await window.electronAPI.exportWord(activeNote.title, html);
+    const result = await window.electronAPI.exportWord(activeNote.title, activeNote.content);
     setExporting(false);
     if (result.success) alert(`已导出为 Word：${result.path}`);
     else if (result.error !== 'cancelled') alert(`导出失败：${result.error}`);
+  };
+
+  const handleExportPdf = async () => {
+    if (!activeNote || !window.electronAPI) return;
+    const confirmed = confirm(
+      '导出 PDF 需要系统已安装 LaTeX 发行版（如 MiKTeX 或 TeX Live）。\n\n' +
+      '如果你尚未安装，请先安装后再使用此功能。\n\n' +
+      '是否已安装 LaTeX？点击「确定」继续导出，点击「取消」放弃。'
+    );
+    if (!confirmed) return;
+    setExporting(true);
+    const result = await window.electronAPI.exportPdf(activeNote.title, activeNote.content);
+    setExporting(false);
+    if (result.success) alert(`已导出为 PDF：${result.path}`);
+    else if (result.error !== 'cancelled') {
+      alert(`导出失败：${result.error}\n\n请确认已正确安装 LaTeX 发行版（MiKTeX 或 TeX Live），并将 xelatex 添加到系统 PATH。`);
+    }
   };
 
   if (!activeNote) {
@@ -73,11 +150,19 @@ export const Preview: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50/50 dark:bg-gray-800/30 min-w-0 border-l border-indigo-100/60 dark:border-gray-800">
-      {/* 标题栏 + 导出按钮 */}
+      {/* 标题栏 */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-indigo-100/40 dark:border-gray-800">
-        <span className="text-xs font-medium text-indigo-300 dark:text-gray-600 tracking-wider">{t.preview}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-indigo-300 dark:text-gray-600 tracking-wider">{t.preview}</span>
+          {compiling && <span className="text-[10px] text-amber-500 animate-pulse">Pandoc 编译中…</span>}
+        </div>
         <div className="flex items-center gap-1">
-          <button onClick={handleExportWord} disabled={exporting}
+          {/* 源码格式选择 */}
+          <select value={sourceFormat} onChange={(e) => setSourceFormat(e.target.value as SourceFormat)}
+            className="text-[10px] px-1.5 py-1 rounded bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 outline-none cursor-pointer">
+            {FORMAT_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+          <button onClick={handleExportWord} disabled={exporting || !activeNote?.content}
             className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 disabled:opacity-50 transition-all"
             title="导出为 Word">
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -85,9 +170,9 @@ export const Preview: React.FC = () => {
             </svg>
             Word
           </button>
-          <button onClick={handleExportPdf} disabled={exporting}
+          <button onClick={handleExportPdf} disabled={exporting || !activeNote?.content}
             className="flex items-center gap-1 px-2 py-1 text-[10px] rounded-md bg-rose-50 dark:bg-rose-900/20 text-rose-500 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-50 transition-all"
-            title="导出为 PDF">
+            title="导出为 PDF（需安装 LaTeX）">
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
             </svg>
@@ -96,7 +181,8 @@ export const Preview: React.FC = () => {
         </div>
       </div>
       {/* 预览内容 */}
-      <div className="flex-1 overflow-auto p-6 prose prose-sm dark:prose-invert max-w-none prose-headings:text-gray-800 dark:prose-headings:text-gray-100 prose-p:text-gray-600 dark:prose-p:text-gray-300 prose-a:text-indigo-500 prose-code:text-indigo-600 dark:prose-code:text-indigo-400 prose-pre:bg-gray-100 dark:prose-pre:bg-gray-800/80"
+      <div ref={contentRef}
+        className="flex-1 overflow-auto p-6 prose prose-sm dark:prose-invert max-w-none prose-headings:text-gray-800 dark:prose-headings:text-gray-100 prose-p:text-gray-600 dark:prose-p:text-gray-300 prose-a:text-indigo-500 prose-code:text-indigo-600 dark:prose-code:text-indigo-400 prose-pre:bg-gray-100 dark:prose-pre:bg-gray-800/80"
         onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   );

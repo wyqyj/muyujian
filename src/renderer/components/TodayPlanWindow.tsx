@@ -25,19 +25,36 @@ export const TodayPlanWindow: React.FC = () => {
   const { t, settings } = useSettingsStore();
   const todayNotes = getTodayPlanNotes();
   const [newTaskTexts, setNewTaskTexts] = useState<Record<string, string>>({});
+  const [opacity, setOpacity] = useState(1);
 
   // 启动时加载便签数据
   useEffect(() => { loadNotes(); }, []);
 
-  // 同步主题到主进程
+  // 同步主题
   useEffect(() => {
     document.documentElement.classList.toggle('dark', settings.theme === 'dark');
   }, [settings.theme]);
 
-  // 定时刷新数据（从磁盘重新读取，保持与主窗口同步）
+  // 监听笔记重载（IPC 事件驱动，替代轮询）
   useEffect(() => {
-    const interval = setInterval(() => { loadNotes(); }, 3000);
-    return () => clearInterval(interval);
+    if (window.electronAPI?.onReloadNotes) {
+      window.electronAPI.onReloadNotes(async () => {
+        if (!window.electronAPI) return;
+        try {
+          const data = await window.electronAPI.getNotes();
+          const { validateNotes } = await import('../store/noteStore');
+          const notes = validateNotes(JSON.parse(data));
+          useNoteStore.setState({ notes });
+        } catch {}
+      });
+    }
+  }, []);
+
+  // 加载保存的透明度
+  useEffect(() => {
+    if (window.electronAPI?.getOpacity) {
+      window.electronAPI.getOpacity().then((v: number) => { if (v) setOpacity(v); });
+    }
   }, []);
 
   const handleToggleTask = (noteId: string, lineIndex: number, checked: boolean) => {
@@ -68,6 +85,11 @@ export const TodayPlanWindow: React.FC = () => {
     setNewTaskTexts(prev => ({ ...prev, [noteId]: '' }));
   };
 
+  const handleOpacityChange = (value: number) => {
+    setOpacity(value);
+    window.electronAPI?.setOpacity(value);
+  };
+
   const handleClose = () => window.electronAPI?.closeTodayPlanWindow();
   const handleMinimize = () => window.electronAPI?.minimizeTodayPlanWindow();
 
@@ -82,6 +104,16 @@ export const TodayPlanWindow: React.FC = () => {
           <span className="text-xs text-slate-400">{todayNotes.length} {t.plan}</span>
         </div>
         <div className="flex items-center gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          {/* 透明度滑块 */}
+          <div className="flex items-center gap-1 mr-2">
+            <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <input type="range" min="20" max="100" value={Math.round(opacity * 100)}
+              onChange={(e) => handleOpacityChange(Number(e.target.value) / 100)}
+              className="w-16 h-1 accent-indigo-400 cursor-pointer" title={`透明度 ${Math.round(opacity * 100)}%`} />
+          </div>
           <button onClick={handleMinimize}
             className="p-1.5 rounded-md hover:bg-white/60 dark:hover:bg-gray-700 text-gray-400 transition-colors">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" /></svg>

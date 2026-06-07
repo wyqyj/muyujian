@@ -3,49 +3,57 @@ import { Sidebar } from './components/Sidebar';
 import { Editor } from './components/Editor';
 import { Preview } from './components/Preview';
 import { TodayPlan } from './components/TodayPlan';
-import { useNoteStore } from './store/noteStore';
+import { useNoteStore, registerReloadListener } from './store/noteStore';
 import { useSettingsStore } from './store/settingsStore';
+import { generateId } from './utils/markdown';
 
 const App: React.FC = () => {
-  const { showTodayPlan, activeNoteId, loadNotes } = useNoteStore();
+  const { showTodayPlan, activeNoteId, loadNotes, addNote, selectNote } = useNoteStore();
   const { settings, t, toggleTheme, toggleTextMode } = useSettingsStore();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
-  const [savedMessage, setSavedMessage] = useState('');
 
-  // 启动时加载便签数据
-  useEffect(() => { loadNotes(); }, []);
+  // 启动时加载便签数据并注册跨窗口重载监听
+  useEffect(() => { loadNotes(); registerReloadListener(); }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', settings.theme === 'dark');
     window.electronAPI?.updateTheme(settings.theme);
   }, [settings.theme]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSavedMessage(t.autoSaved);
-      setTimeout(() => setSavedMessage(''), 2000);
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [t.autoSaved]);
-
+  // 键盘快捷键（Alt+Q 由菜单加速器处理）
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey && e.key === 'q') {
-        window.electronAPI?.toggleQuickNote();
-      }
-      if (e.ctrlKey && e.shiftKey && e.key === 'P') {
-        e.preventDefault();
-        setShowPreview((prev) => !prev);
-      }
+      if (e.ctrlKey && e.shiftKey && e.key === 'P') { e.preventDefault(); setShowPreview((prev) => !prev); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleDoubleClickTitleBar = () => {
-    window.electronAPI?.winMaximize();
-  };
+  // 菜单事件监听
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    window.electronAPI.onNewNote?.(() => {
+      const note = { id: generateId(), title: t.newNote, content: '', tags: [], createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, isArchived: false };
+      addNote(note);
+    });
+    window.electronAPI.onExportData?.(async () => {
+      const data = await window.electronAPI.exportData();
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'muyujian-backup.json'; a.click();
+      URL.revokeObjectURL(url);
+    });
+    window.electronAPI.onImportData?.(() => {
+      const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+      input.onchange = async () => { const file = input.files?.[0]; if (!file) return; const text = await file.text(); window.electronAPI?.importData(text); await loadNotes(); };
+      input.click();
+    });
+    // 监听选中便签事件（来自 QuickNote 窗口）
+    window.electronAPI.onSelectNote?.((noteId: string) => {
+      selectNote(noteId);
+    });
+  }, [addNote, loadNotes, t.newNote, selectNote]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white dark:bg-gray-950">
@@ -74,8 +82,6 @@ const App: React.FC = () => {
 
         {/* 右侧：工具按钮 + 窗口控制，紧挨排列 */}
         <div className="flex items-center gap-1 flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          {savedMessage && <span className="text-[10px] text-emerald-400 animate-fade-in mr-1 whitespace-nowrap">{savedMessage}</span>}
-
           {activeNoteId && !showTodayPlan && (
             <button onClick={() => setShowPreview(!showPreview)}
               className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-all whitespace-nowrap ${showPreview

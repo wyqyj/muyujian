@@ -2,6 +2,7 @@ import MarkdownIt from 'markdown-it';
 import taskLists from 'markdown-it-task-lists';
 import hljs from 'highlight.js';
 import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 // ========== 数学公式预渲染（KaTeX → HTML，在 markdown-it 之前执行）==========
 
@@ -291,10 +292,33 @@ const md = new MarkdownIt({
 
 md.use(taskLists, { enabled: true, label: true, labelAfter: true });
 
-// 行内公式 $...$（用于非 LaTeX 文档的普通 Markdown 中的数学片段）
+// 行内公式 $...$ 和单行 $$...$$（用于非 LaTeX 文档的普通 Markdown 中的数学片段）
 function latexPlugin(md: MarkdownIt): void {
-  md.inline.ruler.after('escape', 'math_inline', (state, silent) => {
+  // 单行块级公式 $$...$$
+  md.inline.ruler.after('escape', 'math_display', (state, silent) => {
+    if (state.src.charCodeAt(state.pos) !== 0x24 || state.src.charCodeAt(state.pos + 1) !== 0x24) return false;
+    const start = state.pos + 2;
+    let end = start;
+    while (end < state.posMax - 1) {
+      if (state.src.charCodeAt(end) === 0x24 && state.src.charCodeAt(end + 1) === 0x24) break;
+      end++;
+    }
+    if (end >= state.posMax - 1 || end === start) return false;
+    if (!silent) {
+      const token = state.push('math_block', 'math', 0);
+      token.content = state.src.slice(start, end).trim();
+      token.markup = '$$';
+      token.block = true;
+    }
+    state.pos = end + 2;
+    return true;
+  });
+
+  // 行内公式 $...$
+  md.inline.ruler.after('math_display', 'math_inline', (state, silent) => {
     if (state.src.charCodeAt(state.pos) !== 0x24) return false;
+    // 跳过 $$（已由 math_display 处理）
+    if (state.src.charCodeAt(state.pos + 1) === 0x24) return false;
     const start = state.pos + 1;
     let end = start;
     let depth = 0;
