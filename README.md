@@ -18,12 +18,13 @@
 
 ## 功能
 
-- **便签管理**：搜索、标签过滤、归档、截止日期倒计时
+- **便签管理**：新建、搜索、标签过滤、归档、截止日期倒计时
 - **Markdown 编辑器**：CodeMirror 6 语法高亮 + 实时预览
-- **LaTeX 公式**：KaTeX 渲染，支持 `$...$` 和 `$$...$$`
+- **LaTeX 公式**：KaTeX 渲染，支持行内 `$...$` 和块级 `$$...$$`
 - **任务列表**：预览区可点击勾选，自动同步源文本
-- **今日计划**：聚合所有标记的便签中未完成任务
-- **快速笔记**：`ait+q` 唤出悬浮小窗口
+- **今日计划**：聚合所有标记的便签中未完成任务，支持悬浮窗口
+- **快速笔记**：`Alt+Q` 唤出悬浮速记小窗口，关闭时自动保存为便签
+- **文档导出**：导出为 Word（pandoc 编译），导出为 PDF（需安装 LaTeX）
 - **自动保存**：每 60 秒自动保存，退出时立即保存
 - **双语风格**：简体中文 / 古风文字一键切换
 - **深色模式**：浅色/深色主题，偏好自动保存
@@ -31,31 +32,38 @@
 ## 快速开始
 
 ```bash
-# 安装依赖（已配置镜像加速）
+# 安装依赖
 npm install
 
-# 构建
-npm run build
+# 开发模式启动
+双击「启动暮雨笺.bat」
 
-# 启动
-双击「启动花笺.bat」
+# 或手动构建并启动
+npm run build
+npx electron .
 ```
 
 ## 打包为安装程序
 
 ```bash
-双击「打包安装程序.bat」
+双击「打包.bat」
 ```
+
+安装包输出在 `release` 文件夹中。
+
+> 注意：pandoc.exe 未包含在 git 仓库中（超过 GitHub 文件限制），打包前请确保 `resources/pandoc/pandoc.exe` 存在。
 
 ## 快捷键
 
 | 快捷键 | 功能 |
 |--------|------|
-| `ait+q` | 快速笔记小窗口 |
+| `Alt+Q` | 快速笔记小窗口 |
+| `Ctrl+N` | 新建便签 |
 | `Ctrl+B` | 加粗 |
 | `Ctrl+I` | 斜体 |
 | `Ctrl+K` | 插入链接 |
+| `Ctrl+Shift+P` | 显示/隐藏预览面板 |
 
 ## 技术栈
 
-Electron + React + TypeScript + Tailwind CSS + CodeMirror 6 + KaTeX + Zustand
+Electron + React + TypeScript + Tailwind CSS + CodeMirror 6 + KaTeX + Zustand + Pandoc
