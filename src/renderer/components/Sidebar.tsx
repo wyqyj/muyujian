@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNoteStore, Note } from '../store/noteStore';
+import { useUIStore } from '../store/uiStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { generateId, formatDate, formatDeadlineDate } from '../utils/markdown';
+import { generateId, formatDate, formatDeadlineDate, extractTasks } from '../utils/markdown';
 import { CountdownBadge } from './CountdownBadge';
 import DatePicker from 'react-datepicker';
 import { zhCN } from 'date-fns/locale';
@@ -81,44 +82,96 @@ const DeadlinePicker: React.FC<{ deadline?: number; onSelect: (ts: number | null
 
 export const Sidebar: React.FC = () => {
   const {
-    notes, activeNoteId, searchQuery, filterTag,
-    setActiveNoteId, setSearchQuery, setFilterTag,
-    addNote, deleteNote, archiveNote, updateNote,
+    notes, activeNoteId,
+    setActiveNoteId,
+    addNote, deleteNote, restoreNote, permanentDelete, emptyTrash, archiveNote, updateNote, togglePin, togglePinInTag,
   } = useNoteStore();
+  const {
+    searchQuery, filterTags,
+    setSearchQuery, toggleFilterTag, clearFilterTags,
+  } = useUIStore();
   const { t } = useSettingsStore();
 
   const [showDeadlinePicker, setShowDeadlinePicker] = useState<string | null>(null);
   const [showTagInput, setShowTagInput] = useState<string | null>(null);
   const [newTag, setNewTag] = useState('');
-  const [sideSection, setSideSection] = useState<'all' | 'today' | 'archived'>('all');
+  const [sideSection, setSideSection] = useState<'all' | 'todo' | 'archived' | 'trash'>('all');
 
-  const allTags = Array.from(new Set(notes.flatMap((n) => n.tags)));
-  const todayPlanNotes = notes.filter((n) => n.isTodayPlan && !n.isArchived);
-  const archivedNotes = notes.filter((n) => n.isArchived);
+  // 点击外部关闭标签输入
+  useEffect(() => {
+    if (!showTagInput) return;
+    const close = () => { setShowTagInput(null); setNewTag(''); };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [showTagInput]);
 
-  const filteredNotes = notes.filter((note) => {
-    if (sideSection === 'today' && !note.isTodayPlan) return false;
-    if (sideSection === 'today' && note.isArchived) return false;
-    if (sideSection === 'archived' && !note.isArchived) return false;
-    if (sideSection === 'all' && note.isArchived) return false;
-    // 搜索在所有视图下生效
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      if (!note.title.toLowerCase().includes(q) && !note.content.toLowerCase().includes(q)) return false;
-    }
-    if (filterTag && !note.tags.includes(filterTag)) return false;
-    return true;
-  });
+  const allTags = useMemo(() => Array.from(new Set(notes.flatMap((n) => n.tags))), [notes]);
+  const todoNotes = useMemo(() => notes.filter((n) => (n.noteType === 'todo' || n.isTodayPlan) && !n.isArchived && !n.isDeleted), [notes]);
+  const archivedNotes = useMemo(() => notes.filter((n) => n.isArchived && !n.isDeleted), [notes]);
+  const trashNotes = useMemo(() => notes.filter((n) => n.isDeleted), [notes]);
+
+  const filteredNotes = useMemo(() => {
+    const filtered = notes.filter((note) => {
+      if (sideSection === 'trash' && !note.isDeleted) return false;
+      if (sideSection !== 'trash' && note.isDeleted) return false;
+      if (sideSection === 'todo' && note.noteType !== 'todo' && !note.isTodayPlan) return false;
+      if (sideSection === 'todo' && note.isArchived) return false;
+      if (sideSection === 'archived' && !note.isArchived) return false;
+      if (sideSection === 'all' && note.isArchived) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (!note.title.toLowerCase().includes(q) && !note.content.toLowerCase().includes(q)) return false;
+      }
+      if (filterTags.length > 0) {
+        if (!filterTags.every(tag => note.tags.includes(tag))) return false;
+      }
+      return true;
+    });
+    return filtered.sort((a, b) => {
+      // 判断是否置顶
+      const activeTag = filterTags.length === 1 ? filterTags[0] : null;
+      const aPinned = a.isPinned || (activeTag && (a.pinnedInTags || []).includes(activeTag));
+      const bPinned = b.isPinned || (activeTag && (b.pinnedInTags || []).includes(activeTag));
+
+      // 待办分类：未完成的待办置顶
+      if (sideSection === 'todo') {
+        const aIsTodo = a.noteType === 'todo' || a.isTodayPlan;
+        const bIsTodo = b.noteType === 'todo' || b.isTodayPlan;
+        const aHasUnchecked = aIsTodo && extractTasks(a.content).some(t => !t.checked);
+        const bHasUnchecked = bIsTodo && extractTasks(b.content).some(t => !t.checked);
+        const aTop = aHasUnchecked || aPinned;
+        const bTop = bHasUnchecked || bPinned;
+        if (aTop && !bTop) return -1;
+        if (!aTop && bTop) return 1;
+      } else {
+        // 全部/标签分类：仅显式置顶生效
+        if (aPinned && !bPinned) return -1;
+        if (!aPinned && bPinned) return 1;
+      }
+      return b.updatedAt - a.updatedAt;
+    });
+  }, [notes, sideSection, searchQuery, filterTags]);
 
   const handleCreateNote = () => {
     const note: Note = {
       id: generateId(), title: t.newNote, content: '', tags: [],
-      createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, isArchived: false,
+      createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, noteType: 'note', isArchived: false,
     };
     addNote(note);
     setActiveNoteId(note.id);
     setSideSection('all');
-    setFilterTag(null);
+    clearFilterTags();
+  };
+
+  const handleCreateTodo = () => {
+    const note: Note = {
+      id: generateId(), title: t.newTodo, content: '- [ ] ', tags: [],
+      createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: true, noteType: 'todo', isArchived: false,
+    };
+    addNote(note);
+    setActiveNoteId(note.id);
+    setSideSection('todo');
+    clearFilterTags();
   };
 
   const handleDeleteNote = (id: string, e: React.MouseEvent) => {
@@ -149,9 +202,16 @@ export const Sidebar: React.FC = () => {
     if (note) updateNote(id, { tags: note.tags.filter((tg) => tg !== tag) });
   };
 
-  const getSummary = (content: string): string => {
+  const getSummary = (content: string): React.ReactNode => {
     const text = content.replace(/[#*\[\]`~>_-]/g, '').replace(/\n+/g, ' ').trim();
-    return text.length > 50 ? text.slice(0, 50) + '…' : text;
+    const truncated = text.length > 50 ? text.slice(0, 50) + '…' : text;
+    if (!searchQuery) return truncated;
+    const q = searchQuery.toLowerCase();
+    const idx = truncated.toLowerCase().indexOf(q);
+    if (idx === -1) return truncated;
+    return (
+      <>{truncated.slice(0, idx)}<mark className="bg-amber-200 dark:bg-amber-700 rounded px-0.5">{truncated.slice(idx, idx + q.length)}</mark>{truncated.slice(idx + q.length)}</>
+    );
   };
 
   const openTodayPlanWindow = () => {
@@ -173,8 +233,8 @@ export const Sidebar: React.FC = () => {
 
       {/* 分类导航 */}
       <div className="px-3 pb-2 space-y-0.5">
-        <button onClick={() => { setSideSection('all'); setFilterTag(null); }}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${sideSection === 'all' && !filterTag
+        <button onClick={() => { setSideSection('all'); clearFilterTags(); }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${sideSection === 'all' && filterTags.length === 0
             ? 'bg-white dark:bg-gray-800 text-rose-500 shadow-sm font-medium'
             : 'text-gray-500 dark:text-gray-400 hover:bg-white/50 dark:hover:bg-gray-800/50'}`}>
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -184,16 +244,34 @@ export const Sidebar: React.FC = () => {
           <span className="ml-auto text-xs text-gray-300">{notes.filter(n => !n.isArchived).length}</span>
         </button>
 
-        <button onClick={() => { setSideSection('today'); setFilterTag(null); }}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${sideSection === 'today'
+        <button onClick={() => { setSideSection('todo'); clearFilterTags(); }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${sideSection === 'todo'
             ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 shadow-sm font-medium'
             : 'text-gray-500 dark:text-gray-400 hover:bg-amber-50/50 dark:hover:bg-amber-900/10'}`}>
           <span className="text-amber-400 text-base">☆</span>
-          {t.todayPlanView}
-          <span className="ml-auto text-xs text-gray-300">{todayPlanNotes.length}</span>
+          {t.todo}
+          <span className="ml-auto text-xs text-gray-300">{todoNotes.length}</span>
         </button>
 
-        {todayPlanNotes.length > 0 && (
+        {sideSection === 'todo' && (
+          <button onClick={handleCreateTodo}
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs text-amber-500 hover:bg-amber-50/50 dark:hover:bg-amber-900/10 transition-all">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            {t.newTodo}
+          </button>
+        )}
+
+        <button onClick={() => window.electronAPI?.toggleTimerStatsWindow?.()}
+          className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs text-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 transition-all">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          任务统计
+        </button>
+
+        {todoNotes.length > 0 && (
           <button onClick={openTodayPlanWindow}
             className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs text-amber-500 hover:bg-amber-50/50 dark:hover:bg-amber-900/10 transition-all">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -203,7 +281,7 @@ export const Sidebar: React.FC = () => {
           </button>
         )}
 
-        <button onClick={() => { setSideSection('archived'); setFilterTag(null); }}
+        <button onClick={() => { setSideSection('archived'); clearFilterTags(); }}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${sideSection === 'archived'
             ? 'bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 shadow-sm font-medium'
             : 'text-gray-500 dark:text-gray-400 hover:bg-violet-50/50 dark:hover:bg-violet-900/10'}`}>
@@ -213,18 +291,30 @@ export const Sidebar: React.FC = () => {
           {t.archive}
           <span className="ml-auto text-xs text-gray-300">{archivedNotes.length}</span>
         </button>
+
+        <button onClick={() => { setSideSection('trash'); clearFilterTags(); }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${sideSection === 'trash'
+            ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 shadow-sm font-medium'
+            : 'text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          回收站
+          <span className="ml-auto text-xs text-gray-300">{trashNotes.length}</span>
+        </button>
       </div>
 
       {/* 标签分类 */}
-      {allTags.length > 0 && sideSection === 'all' && (
+      {allTags.length > 0 && (
         <div className="px-3 pb-2">
           <div className="px-3 py-1 text-[10px] font-medium text-gray-300 dark:text-gray-600 uppercase tracking-widest">{t.addTag}</div>
           <div className="flex flex-wrap gap-1.5 px-1">
             {allTags.map((tag) => {
               const count = notes.filter(n => !n.isArchived && n.tags.includes(tag)).length;
+              const isSelected = filterTags.includes(tag);
               return (
-                <button key={tag} onClick={() => { setFilterTag(filterTag === tag ? null : tag); setSideSection('all'); }}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-all ${filterTag === tag
+                <button key={tag} onClick={() => { toggleFilterTag(tag); setSideSection('all'); }}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-all ${isSelected
                     ? 'bg-rose-400 text-white shadow-sm'
                     : 'bg-rose-50 dark:bg-gray-800 text-rose-500 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-gray-700'}`}>
                   <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50" />
@@ -256,25 +346,98 @@ export const Sidebar: React.FC = () => {
         {filteredNotes.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-gray-300 dark:text-gray-600 px-6">
             <p className="text-sm text-center">
-              {sideSection === 'archived' ? t.noArchived : sideSection === 'today' ? t.noTodayPlan : t.noNotes}
+              {sideSection === 'archived' ? t.noArchived : sideSection === 'todo' ? t.noTodo : sideSection === 'trash' ? '回收站为空' : t.noNotes}
             </p>
           </div>
         ) : (
           <div className="p-2 space-y-1">
-            {filteredNotes.map((note) => (
+            {sideSection === 'trash' && trashNotes.length > 0 && (
+              <button onClick={() => { if (confirm('确定永久删除所有回收站中的笔记？此操作不可恢复。')) emptyTrash(); }}
+                className="w-full mb-2 px-3 py-2 text-xs text-red-500 bg-red-50 dark:bg-red-900/10 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 transition-all">
+                清空回收站
+              </button>
+            )}
+            {filteredNotes.map((note) => {
+              const isTodo = note.noteType === 'todo' || note.isTodayPlan;
+              const allCompleted = isTodo && note.content.trim() && extractTasks(note.content).length > 0 && extractTasks(note.content).every(t => t.checked);
+              return (
               <div key={note.id} onClick={() => setActiveNoteId(note.id)}
                 className={`group relative p-3 rounded-xl cursor-pointer transition-all duration-200 ${activeNoteId === note.id
                   ? 'bg-white dark:bg-gray-800 shadow-md shadow-rose-100/50 dark:shadow-gray-900/50 border border-rose-200/60 dark:border-gray-700'
-                  : 'bg-transparent hover:bg-white/60 dark:hover:bg-gray-800/40 border border-transparent'}`}>
+                  : allCompleted
+                    ? 'bg-gray-50/80 dark:bg-gray-800/20 border border-transparent opacity-60'
+                    : 'bg-transparent hover:bg-white/60 dark:hover:bg-gray-800/40 border border-transparent'}`}>
 
                 {/* 标题行 */}
                 <div className="flex items-start justify-between">
-                  <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate flex-1 leading-relaxed">
+                  <h3 className={`text-sm font-medium truncate flex-1 leading-relaxed ${allCompleted ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-800 dark:text-gray-200'}`}>
+                    {(() => {
+                      const activeTag = filterTags.length === 1 ? filterTags[0] : null;
+                      const isPinnedHere = activeTag
+                        ? (note.pinnedInTags || []).includes(activeTag) || note.isPinned
+                        : !!note.isPinned;
+                      return isPinnedHere ? <span className="text-rose-400 mr-1">📌</span> : null;
+                    })()}
                     {note.isTodayPlan && <span className="text-amber-400 mr-1">☆</span>}
-                    {note.title}
+                    {searchQuery ? (() => {
+                      const q = searchQuery.toLowerCase();
+                      const idx = note.title.toLowerCase().indexOf(q);
+                      if (idx === -1) return note.title;
+                      return <>{note.title.slice(0, idx)}<mark className="bg-amber-200 dark:bg-amber-700 rounded px-0.5">{note.title.slice(idx, idx + q.length)}</mark>{note.title.slice(idx + q.length)}</>;
+                    })() : note.title}
                   </h3>
+                  {isTodo && (() => {
+                    const tasks = extractTasks(note.content);
+                    const done = tasks.filter(t => t.checked).length;
+                    return tasks.length > 0 ? (
+                      <span className={`text-[10px] ml-2 flex-shrink-0 ${allCompleted ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'}`}>
+                        {done}/{tasks.length}
+                      </span>
+                    ) : null;
+                  })()}
                   {/* 悬浮操作按钮组 */}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-200 ml-1 flex-shrink-0">
+                    {sideSection === 'trash' ? (
+                      <>
+                        <button onClick={(e) => { e.stopPropagation(); restoreNote(note.id); }}
+                          className="p-1.5 rounded-lg text-gray-300 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all"
+                          title="恢复">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                          </svg>
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); if (confirm('永久删除后不可恢复，确定？')) permanentDelete(note.id); }}
+                          className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                          title="永久删除">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                    {/* 置顶按钮 */}
+                    {(() => {
+                      const activeTag = filterTags.length === 1 ? filterTags[0] : null;
+                      const isPinnedHere = activeTag
+                        ? (note.pinnedInTags || []).includes(activeTag) || note.isPinned
+                        : !!note.isPinned;
+                      return (
+                        <button onClick={(e) => {
+                          e.stopPropagation();
+                          if (activeTag) togglePinInTag(note.id, activeTag);
+                          else togglePin(note.id);
+                        }}
+                          className={`p-1.5 rounded-lg transition-all ${isPinnedHere
+                            ? 'text-rose-500 bg-rose-50 dark:bg-rose-900/20'
+                            : 'text-gray-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20'}`}
+                          title={isPinnedHere ? '取消置顶' : '置顶'}>
+                          <svg className="w-3.5 h-3.5" fill={isPinnedHere ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                          </svg>
+                        </button>
+                      );
+                    })()}
                     <button onClick={(e) => { e.stopPropagation(); updateNote(note.id, { isTodayPlan: !note.isTodayPlan }); }}
                       className={`p-1.5 rounded-lg transition-all ${note.isTodayPlan
                         ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20'
@@ -300,6 +463,8 @@ export const Sidebar: React.FC = () => {
                       title={t.delete}>
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -329,13 +494,30 @@ export const Sidebar: React.FC = () => {
 
                 {/* 标签输入框 */}
                 {showTagInput === note.id && (
-                  <div className="mt-2 flex gap-1" onClick={(e) => e.stopPropagation()}>
-                    <input type="text" placeholder={t.tagPlaceholder} value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddTag(note.id, e)}
-                      className="flex-1 px-2 py-1 text-xs border border-rose-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-rose-300" autoFocus />
-                    <button onClick={(e) => handleAddTag(note.id, e)}
-                      className="px-2.5 py-1 text-xs bg-rose-400 text-white rounded-lg hover:bg-rose-500 transition-colors">{t.add}</button>
+                  <div className="mt-2 relative" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-1">
+                      <input type="text" placeholder={t.tagPlaceholder} value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { handleAddTag(note.id, e); } }}
+                        className="flex-1 px-2 py-1 text-xs border border-rose-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-rose-300" autoFocus />
+                      <button onClick={(e) => handleAddTag(note.id, e)}
+                        className="px-2.5 py-1 text-xs bg-rose-400 text-white rounded-lg hover:bg-rose-500 transition-colors">{t.add}</button>
+                    </div>
+                    {allTags.filter(tag => !note.tags.includes(tag) && (newTag ? tag.includes(newTag) : true)).length > 0 && (
+                      <div className="mt-1 max-h-32 overflow-y-auto bg-white dark:bg-gray-800 border border-rose-100 dark:border-gray-700 rounded-lg shadow-lg">
+                        {allTags.filter(tag => !note.tags.includes(tag) && (newTag ? tag.includes(newTag) : true)).map(tag => (
+                          <button key={tag} onClick={(e) => {
+                            e.stopPropagation();
+                            updateNote(note.id, { tags: [...note.tags, tag] });
+                            setNewTag('');
+                            setShowTagInput(null);
+                          }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-rose-50 dark:hover:bg-gray-700 transition-colors">
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -349,10 +531,13 @@ export const Sidebar: React.FC = () => {
 
                 {/* 时间 */}
                 <div className="text-[10px] text-gray-300 dark:text-gray-600 mt-1">
-                  {formatDate(note.updatedAt)}
+                  {sideSection === 'trash' && note.deletedAt
+                    ? `删除于 ${formatDate(note.deletedAt)}`
+                    : formatDate(note.updatedAt)}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

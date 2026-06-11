@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNoteStore } from '../store/noteStore';
+import { useUIStore } from '../store/uiStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { extractTasks, toggleTaskCheckbox } from '../utils/markdown';
 import { CountdownBadge } from './CountdownBadge';
@@ -21,9 +22,10 @@ const TaskItem: React.FC<{ task: { text: string; checked: boolean; lineIndex: nu
 };
 
 export const TodayPlan: React.FC = () => {
-  const { getTodayPlanNotes, updateNote, setActiveNoteId, setShowTodayPlan } = useNoteStore();
+  const { getTodoNotes, updateNote, setActiveNoteId } = useNoteStore();
+  const { setShowTodayPlan } = useUIStore();
   const { t } = useSettingsStore();
-  const todayNotes = getTodayPlanNotes();
+  const todayNotes = getTodoNotes();
   const [newTaskTexts, setNewTaskTexts] = useState<Record<string, string>>({});
 
   const handleToggleTask = (noteId: string, lineIndex: number, checked: boolean) => {
@@ -45,13 +47,14 @@ export const TodayPlan: React.FC = () => {
   };
 
   const handleAddTask = (noteId: string) => {
-    const text = (newTaskTexts[noteId] || '').trim();
-    if (!text) return;
+    const raw = (newTaskTexts[noteId] || '').trim();
+    if (!raw) return;
     const note = todayNotes.find((n) => n.id === noteId);
     if (!note) return;
-    // 在内容末尾追加新任务
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    const newTasks = lines.map(line => `- [ ] ${line}`).join('\n');
     const newLine = note.content.endsWith('\n') ? '' : '\n';
-    updateNote(noteId, { content: note.content + newLine + `- [ ] ${text}` });
+    updateNote(noteId, { content: note.content + newLine + newTasks });
     setNewTaskTexts(prev => ({ ...prev, [noteId]: '' }));
   };
 
@@ -111,14 +114,20 @@ export const TodayPlan: React.FC = () => {
                 </ul>
               )}
               {/* 添加任务输入框 */}
-              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100/40 dark:border-gray-700/30">
-                <svg className="w-4 h-4 text-indigo-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="flex items-start gap-2 mt-2 pt-2 border-t border-slate-100/40 dark:border-gray-700/30">
+                <svg className="w-4 h-4 text-indigo-300 flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                <input type="text" placeholder="添加新任务..." value={newTaskTexts[note.id] || ''}
+                <textarea placeholder="添加任务（每行一个，Shift+Enter 换行）" value={newTaskTexts[note.id] || ''}
                   onChange={(e) => setNewTaskTexts(prev => ({ ...prev, [note.id]: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddTask(note.id); }}
-                  className="flex-1 text-sm bg-transparent border-none outline-none text-gray-600 dark:text-gray-300 placeholder:text-gray-300" />
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAddTask(note.id);
+                    }
+                  }}
+                  rows={1}
+                  className="flex-1 text-sm bg-transparent border-none outline-none text-gray-600 dark:text-gray-300 placeholder:text-gray-300 resize-none" />
                 <button onClick={() => handleAddTask(note.id)}
                   className="px-2 py-1 text-xs rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-all">
                   添加

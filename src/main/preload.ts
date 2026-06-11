@@ -53,4 +53,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 通知主窗口选中指定便签
   selectNote: (noteId: string) => ipcRenderer.send('select-note', noteId),
   onSelectNote: (callback: (noteId: string) => void) => ipcRenderer.on('select-note', (_e, noteId) => callback(noteId)),
+  // 任务计时
+  saveTimerRecord: (record: any) => ipcRenderer.invoke('save-timer-record', record),
+  getTimerRecords: () => ipcRenderer.invoke('get-timer-records'),
+  saveActiveSession: (session: any) => ipcRenderer.invoke('save-active-session', session),
+  loadActiveSession: () => ipcRenderer.invoke('load-active-session'),
+  // 统计窗口
+  toggleTimerStatsWindow: () => ipcRenderer.send('toggle-timer-stats-window'),
+  closeTimerStatsWindow: () => ipcRenderer.send('close-timer-stats-window'),
+  minimizeTimerStatsWindow: () => ipcRenderer.send('minimize-timer-stats-window'),
 });

@@ -4,14 +4,17 @@ import { Editor } from './components/Editor';
 import { Preview } from './components/Preview';
 import { TodayPlan } from './components/TodayPlan';
 import { useNoteStore, registerReloadListener } from './store/noteStore';
+import { useUIStore } from './store/uiStore';
 import { useSettingsStore } from './store/settingsStore';
 import { generateId } from './utils/markdown';
 
 const App: React.FC = () => {
-  const { showTodayPlan, activeNoteId, loadNotes, addNote, selectNote } = useNoteStore();
+  const { activeNoteId, loadNotes, addNote, selectNote } = useNoteStore();
+  const { showTodayPlan, setShowTodayPlan } = useUIStore();
   const { settings, t, toggleTheme, toggleTextMode } = useSettingsStore();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
+  const [focusMode, setFocusMode] = useState(false);
 
   // 启动时加载便签数据并注册跨窗口重载监听
   useEffect(() => { loadNotes(); registerReloadListener(); }, []);
@@ -21,20 +24,22 @@ const App: React.FC = () => {
     window.electronAPI?.updateTheme(settings.theme);
   }, [settings.theme]);
 
-  // 键盘快捷键（Alt+Q 由菜单加速器处理）
+  // 键盘快捷键
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'P') { e.preventDefault(); setShowPreview((prev) => !prev); }
+      if (e.key === 'F11') { e.preventDefault(); setFocusMode((prev) => !prev); }
+      if (e.key === 'Escape' && focusMode) { setFocusMode(false); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [focusMode]);
 
   // 菜单事件监听
   useEffect(() => {
     if (!window.electronAPI) return;
     window.electronAPI.onNewNote?.(() => {
-      const note = { id: generateId(), title: t.newNote, content: '', tags: [], createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, isArchived: false };
+      const note = { id: generateId(), title: t.newNote, content: '', tags: [], createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, noteType: 'note' as const, isArchived: false };
       addNote(note);
     });
     window.electronAPI.onExportData?.(async () => {
@@ -57,7 +62,8 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white dark:bg-gray-950">
-      {/* 自定义标题栏 - 可拖拽 */}
+      {/* 自定义标题栏 - 专注模式下隐藏 */}
+      {!focusMode && (
       <div className="flex items-center h-9 px-2 bg-white dark:bg-gray-900 border-b border-slate-200 dark:border-gray-800 select-none flex-shrink-0"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
 
@@ -144,27 +150,42 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* 主内容区 */}
       <div className="flex-1 flex min-h-0">
-        {/* 侧边栏 */}
+        {/* 侧边栏 - 专注模式下隐藏 */}
+        {!focusMode && (
         <div className={`transition-all duration-300 ease-in-out flex-shrink-0 ${sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-72'}`}>
           <Sidebar />
         </div>
+        )}
 
         {/* 编辑器区 */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* 内容区域 */}
-          <div className="flex-1 flex min-h-0">
-            {showTodayPlan ? <TodayPlan /> : <><Editor />{showPreview && <Preview />}</>}
+          <div className="flex-1 flex min-h-0 relative">
+            {showTodayPlan && !focusMode ? <TodayPlan /> : <><Editor />{(showPreview && !focusMode) && <Preview />}</>}
+            {/* 专注模式退出提示 */}
+            {focusMode && (
+              <div className="absolute top-2 right-2 z-50 opacity-0 hover:opacity-100 transition-opacity">
+                <button onClick={() => setFocusMode(false)}
+                  className="px-2 py-1 text-[10px] rounded-lg bg-gray-800/60 text-gray-300 hover:bg-gray-700/80 backdrop-blur-sm">
+                  按 Esc 或 F11 退出专注
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* 底部状态栏 */}
+          {/* 底部状态栏 - 专注模式下隐藏 */}
+          {!focusMode && (
           <div className="flex items-center justify-between px-3 py-1 border-t border-slate-200 dark:border-gray-800 bg-slate-50 dark:bg-gray-900 flex-shrink-0">
             <div className="flex items-center gap-3 text-[11px] text-gray-300 dark:text-gray-600">
               <span>Alt+Q: {t.shortcutHint}</span>
               <span className="text-slate-300">·</span>
               <span>Ctrl+Shift+P: {t.preview}</span>
+              <span className="text-slate-300">·</span>
+              <span>F11: 专注模式</span>
               <span className="text-slate-300">·</span>
               <span>Ctrl+B: {t.bold}</span>
               <span className="text-slate-300">·</span>
@@ -174,6 +195,7 @@ const App: React.FC = () => {
               {settings.theme === 'light' ? t.themeLight : t.themeDark}
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

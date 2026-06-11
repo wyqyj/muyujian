@@ -9,6 +9,21 @@ export default defineConfig({
   build: {
     outDir: '../../dist/renderer',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-codemirror': [
+            '@codemirror/view', '@codemirror/state',
+            '@codemirror/lang-markdown', '@codemirror/language',
+            '@codemirror/language-data', '@codemirror/commands',
+          ],
+          'vendor-markdown': ['markdown-it', 'markdown-it-task-lists', 'highlight.js', 'katex'],
+          'vendor-zustand': ['zustand'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 500,
   },
   resolve: {
     alias: {

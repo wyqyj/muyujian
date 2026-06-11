@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { renderMarkdown } from '../utils/markdown';
 import { useSettingsStore } from '../store/settingsStore';
 import { generateId } from '../utils/markdown';
@@ -25,7 +25,7 @@ export const QuickNote: React.FC = () => {
       const title = `随笔记 ${now.toLocaleDateString('zh-CN')} ${now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
       const noteJson = JSON.stringify({
         id: generateId(), title, content: '', tags: ['随笔记'],
-        createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, isArchived: false,
+        createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, noteType: 'note', isArchived: false,
       });
       console.log('[QuickNote] calling createQuickNote...');
       const result = await window.electronAPI.createQuickNote(noteJson);
@@ -105,7 +105,7 @@ export const QuickNote: React.FC = () => {
     // 创建新的随笔记便签供下次使用
     const newNoteJson = JSON.stringify({
       id: generateId(), title: `随笔记 ${now.toLocaleDateString('zh-CN')} ${now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`,
-      content: '', tags: ['随笔记'], createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, isArchived: false,
+      content: '', tags: ['随笔记'], createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, noteType: 'note', isArchived: false,
     });
     const result = await window.electronAPI.createQuickNote(newNoteJson);
     if (result.success && result.noteId) {
@@ -123,7 +123,7 @@ export const QuickNote: React.FC = () => {
     window.electronAPI?.closeQuickNote();
   };
 
-  const previewHtml = renderMarkdown(content);
+  const previewHtml = useMemo(() => renderMarkdown(content), [content]);
 
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-gray-900 overflow-hidden select-none">

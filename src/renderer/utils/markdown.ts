@@ -1,8 +1,42 @@
 import MarkdownIt from 'markdown-it';
 import taskLists from 'markdown-it-task-lists';
-import hljs from 'highlight.js';
+import hljs from 'highlight.js/lib/core';
+import javascript from 'highlight.js/lib/languages/javascript';
+import typescript from 'highlight.js/lib/languages/typescript';
+import python from 'highlight.js/lib/languages/python';
+import css from 'highlight.js/lib/languages/css';
+import xml from 'highlight.js/lib/languages/xml';
+import json from 'highlight.js/lib/languages/json';
+import bash from 'highlight.js/lib/languages/bash';
+import markdown_lang from 'highlight.js/lib/languages/markdown';
+import java from 'highlight.js/lib/languages/java';
+import cpp from 'highlight.js/lib/languages/cpp';
+import rust from 'highlight.js/lib/languages/rust';
+import go from 'highlight.js/lib/languages/go';
+import sql from 'highlight.js/lib/languages/sql';
+import yaml from 'highlight.js/lib/languages/yaml';
+import latex_lang from 'highlight.js/lib/languages/latex';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('css', css);
+hljs.registerLanguage('xml', xml);
+hljs.registerLanguage('html', xml);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('shell', bash);
+hljs.registerLanguage('markdown', markdown_lang);
+hljs.registerLanguage('java', java);
+hljs.registerLanguage('cpp', cpp);
+hljs.registerLanguage('c', cpp);
+hljs.registerLanguage('rust', rust);
+hljs.registerLanguage('go', go);
+hljs.registerLanguage('sql', sql);
+hljs.registerLanguage('yaml', yaml);
+hljs.registerLanguage('latex', latex_lang);
 
 // ========== 数学公式预渲染（KaTeX → HTML，在 markdown-it 之前执行）==========
 
@@ -376,15 +410,20 @@ md.use(latexPlugin);
 /**
  * 渲染 Markdown/LaTeX 文本为 HTML
  */
+function preprocessWikiLinks(text: string): string {
+  return text.replace(/\[\[([^\]]+)\]\]/g, (_, title) => {
+    const escaped = title.replace(/"/g, '&quot;');
+    return `<a class="wiki-link" data-title="${escaped}" href="javascript:void(0)">${title}</a>`;
+  });
+}
+
 export function renderMarkdown(text: string): string {
   if (isLatexDocument(text)) {
-    // LaTeX 文档：先渲染数学公式为 HTML，再转换结构，最后用 markdown-it 处理剩余内容
     const { text: mathRendered } = preRenderMath(text);
     const structured = preprocessLatexStructure(mathRendered);
-    return md.render(structured);
+    return md.render(preprocessWikiLinks(structured));
   }
-  // 普通 Markdown：直接用 markdown-it（内置 $...$ 插件处理数学片段）
-  return md.render(text);
+  return md.render(preprocessWikiLinks(text));
 }
 
 export function toggleTaskCheckbox(source: string, lineIndex: number, checked: boolean): string {
@@ -461,4 +500,16 @@ export function formatDeadlineDate(timestamp: number): string {
     timeStr = ` ${period} ${h}:${d.getMinutes().toString().padStart(2, '0')}`;
   }
   return `${d.getMonth() + 1}月${d.getDate()}日（周${weekdays[d.getDay()]}）${timeStr}`;
+}
+
+export function postProcessPandocHtml(html: string): string {
+  html = html.replace(/\\\((.+?)\\\)/g, (_, math) => {
+    try { return katex.renderToString(math, { throwOnError: false, displayMode: false }); }
+    catch { return `<span class="katex-error">${math}</span>`; }
+  });
+  html = html.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => {
+    try { return `<div class="katex-block">${katex.renderToString(math.trim(), { throwOnError: false, displayMode: true })}</div>`; }
+    catch { return `<div class="katex-error">${math}</div>`; }
+  });
+  return html;
 }

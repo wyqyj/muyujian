@@ -33,7 +33,7 @@ export const Editor: React.FC = () => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { notes, activeNoteId, updateNote } = useNoteStore();
+  const { notes, activeNoteId, updateNote, updateContent } = useNoteStore();
   const { t } = useSettingsStore();
 
   const activeNote = notes.find((n) => n.id === activeNoteId);
@@ -131,6 +131,7 @@ export const Editor: React.FC = () => {
     const state = EditorState.create({
       doc: activeNote.content,
       extensions: [
+        EditorView.lineWrapping,
         lineNumbers(), highlightActiveLine(), highlightActiveLineGutter(),
         drawSelection(), history(), bracketMatching(), foldGutter(),
         syntaxHighlighting(defaultHighlightStyle),
@@ -174,7 +175,7 @@ export const Editor: React.FC = () => {
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && activeNoteId) {
-            updateNote(activeNoteId, { content: update.state.doc.toString() });
+            updateContent(activeNoteId, update.state.doc.toString());
           }
         }),
         EditorView.domEventHandlers({

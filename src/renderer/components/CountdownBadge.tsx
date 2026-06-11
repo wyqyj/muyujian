@@ -1,5 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getDeadlineInfo, formatDeadlineDate } from '../utils/markdown';
+
+let sharedInterval: ReturnType<typeof setInterval> | null = null;
+let subscriberCount = 0;
+const subscribers = new Set<() => void>();
+
+function subscribeToTimer(callback: () => void): () => void {
+  subscribers.add(callback);
+  subscriberCount++;
+  if (!sharedInterval) {
+    sharedInterval = setInterval(() => {
+      subscribers.forEach((cb) => cb());
+    }, 10000);
+  }
+  return () => {
+    subscribers.delete(callback);
+    subscriberCount--;
+    if (subscriberCount === 0 && sharedInterval) {
+      clearInterval(sharedInterval);
+      sharedInterval = null;
+    }
+  };
+}
 
 interface CountdownBadgeProps {
   deadline: number;
@@ -8,24 +30,15 @@ interface CountdownBadgeProps {
 
 export const CountdownBadge: React.FC<CountdownBadgeProps> = ({ deadline, showFull = false }) => {
   const [info, setInfo] = useState(() => getDeadlineInfo(deadline));
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const update = () => {
       const newInfo = getDeadlineInfo(deadline);
       setInfo(newInfo);
-      // 过期后停止定时器
-      if (newInfo.isExpired && intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
     };
     update();
-    // 未过期时每 10 秒更新一次（减少重渲染）
-    if (!info.isExpired) {
-      intervalRef.current = setInterval(update, 10000);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    if (info.isExpired) return;
+    return subscribeToTimer(update);
   }, [deadline]);
 
   const renderCountdown = () => {

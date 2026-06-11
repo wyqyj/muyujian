@@ -46,27 +46,34 @@ function createWelcomeNote(): void {
     const welcomeNotes = [
       {
         id: 'welcome-001', title: '暮雨笺 · 功能介绍',
-        content: `暮雨笺是一款融合记事本、时间计划与快速随笔记的桌面应用，支持 Markdown 和 LaTeX 数学公式的实时渲染。
+        content: `暮雨笺是一款融合记事本、待办管理与快速随笔记的桌面应用，支持 Markdown 和 LaTeX 数学公式的实时渲染。
 
 便签管理
 - 点击侧边栏「新建便签」按钮创建新便签
-- 顶部搜索框支持按标题和内容模糊搜索
-- 为便签添加标签，点击标签可筛选过滤
-- 便签操作栏中可归档、删除、设置截止日期
-- 点击 ☆ 将便签标记为今日计划
-- 设置截止日期后自动显示倒计时，超期标红
+- 顶部搜索框支持按标题和内容模糊搜索，结果高亮显示
+- 为便签添加标签，支持多选标签筛选（AND 逻辑）
+- 标签输入时可从已有标签下拉选择，也可手动输入新标签
+- 便签支持全局置顶和标签内独立置顶
+- 便签可归档、删除（进入回收站）、设置截止日期
+- 回收站中的便签可恢复或永久删除
 
 编辑器
-- 基于 CodeMirror 6 的 Markdown 编辑器，支持语法高亮
+- 基于 CodeMirror 6 的 Markdown 编辑器，支持语法高亮和自动换行
+- Ctrl+F 搜索、Ctrl+H 替换
 - 快捷键：Ctrl+B 加粗、Ctrl+I 斜体、Ctrl+K 链接
 - 支持插入图片（工具栏选择、粘贴、拖拽均可）
-- 支持代码块，自动识别多种编程语言语法高亮
+- 支持代码块，自动识别 16 种编程语言语法高亮
+- 支持笔记链接：用 [[标题]] 语法链接到其他便签，点击即可跳转
 
-今日计划
-- 在便签上点击 ☆ 标记为今日计划
-- 侧边栏点击「今日计划」查看所有待办任务
-- 支持「悬浮窗口查看」，窗口始终置顶
-- 每个任务可直接勾选完成
+待办系统
+- 点击 ☆ 将便签标记为待办，或直接新建待办便签
+- 待办便签支持批量添加任务（每行一个）
+- 每个任务可单独设置截止时间，显示天:时:分 倒计时
+- 每个任务支持正向计时（秒表），记录用时数据
+- 侧边栏「任务统计」查看今日/本周/本月用时饼状图和时间线
+- 侧边栏「待办」分类中，未完成的待办便签自动置顶
+- 全部任务完成后便签自动变灰
+- 支持悬浮窗口查看，窗口始终置顶，可调节透明度
 
 快速笔记
 - 按 Alt+Q 呼出悬浮速记小窗口
@@ -76,14 +83,19 @@ function createWelcomeNote(): void {
 界面
 - 浅色与深色主题切换（顶栏月亮图标）
 - 简体中文与古风文字切换（顶栏按钮）
-- 预览面板可手动显示或隐藏（Ctrl+Shift+P）
+- 预览面板可显示或隐藏（Ctrl+Shift+P）
+- F11 进入专注模式，隐藏侧边栏和预览，沉浸写作
 
 导出
-- 预览面板中可将便签导出为 Word 文档
+- 预览面板中可将便签导出为 Word、PDF、Markdown、HTML、纯文本
 - 导出 PDF 需系统安装 LaTeX 发行版（如 MiKTeX）
 
+排序
+- 支持按更新时间、创建时间、标题、截止日期排序
+- 点击升降序按钮切换排列方向
+
 提示：所有数据存储在安装目录的 data 文件夹中，可随时备份。`,
-        tags: ['启程'], createdAt: now, updatedAt: now, isTodayPlan: false, isArchived: false,
+        tags: ['启程'], createdAt: now, updatedAt: now, isTodayPlan: false, noteType: 'note', isArchived: false,
       },
       {
         id: 'welcome-002', title: 'Markdown 语法演示',
@@ -119,9 +131,15 @@ function greet(name) {
 | 斜体     | 用 \`*\` 包裹文字    |
 | 代码     | 用反引号包裹       |
 | 链接     | \`[文字](地址)\`     |
+| 任务     | \`- [ ]\` 或 \`- [x]\` |
+| 笔记链接 | \`[[标题]]\` 双链跳转 |
+
+---
+
+笔记链接演示：这是一条指向 [[暮雨笺 · 功能介绍]] 的链接，点击可跳转。
 
 > 提示：编辑此便签，观察右侧预览面板的实时渲染效果。`,
-        tags: ['启程'], createdAt: now + 1, updatedAt: now + 1, isTodayPlan: false, isArchived: false,
+        tags: ['启程'], createdAt: now + 1, updatedAt: now + 1, isTodayPlan: false, noteType: 'note', isArchived: false,
       },
       {
         id: 'welcome-003', title: 'LaTeX 公式演示',
@@ -145,8 +163,14 @@ $$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix} \\begin{pmatrix} x \\\\ y \\e
 
 $$e^x = \\sum_{n=0}^{\\infty} \\frac{x^n}{n!} = 1 + x + \\frac{x^2}{2!} + \\frac{x^3}{3!} + \\cdots$$
 
+也支持 equation 环境：
+
+\\begin{equation}
+\\nabla \\times \\mathbf{E} = -\\frac{\\partial \\mathbf{B}}{\\partial t}
+\\end{equation}
+
 > 提示：编辑此便签，观察右侧预览面板的实时渲染效果。`,
-        tags: ['启程'], createdAt: now + 2, updatedAt: now + 2, isTodayPlan: false, isArchived: false,
+        tags: ['启程'], createdAt: now + 2, updatedAt: now + 2, isTodayPlan: false, noteType: 'note', isArchived: false,
       },
       {
         id: 'welcome-004', title: '寄语',
@@ -157,7 +181,7 @@ $$e^x = \\sum_{n=0}^{\\infty} \\frac{x^n}{n!} = 1 + x + \\frac{x^2}{2!} + \\frac
 这个小小的便签应用，希望能成为你未来路上的随身笔记本——记录灵感、规划日程、整理思绪。无论走到哪里，愿它陪你把每一天都过得井井有条。
 
 前路漫漫，未来可期。祝一切顺利，万事胜意。`,
-        tags: ['启程'], createdAt: now + 3, updatedAt: now + 3, isTodayPlan: false, isArchived: false,
+        tags: ['启程'], createdAt: now + 3, updatedAt: now + 3, isTodayPlan: false, noteType: 'note', isArchived: false,
       },
     ];
     notes.unshift(...welcomeNotes);
@@ -169,6 +193,7 @@ let mainWindow: BrowserWindow | null = null;
 const quickNoteWindows: BrowserWindow[] = [];
 const MAX_QUICK_NOTE_WINDOWS = 10;
 let todayPlanWindow: BrowserWindow | null = null;
+let timerStatsWindow: BrowserWindow | null = null;
 let lastQuickNoteCreateTime = 0;
 
 function createMainWindow(): void {
@@ -241,7 +266,7 @@ function createTodayPlanWindow(): void {
     width: savedBounds?.width || 420, height: savedBounds?.height || 600,
     x: savedBounds?.x, y: savedBounds?.y,
     frame: false, alwaysOnTop: true, resizable: true, movable: true,
-    title: '暮雨笺 · 今日计划',
+    title: '暮雨笺 · 待办',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
     show: false,
   });
@@ -252,6 +277,22 @@ function createTodayPlanWindow(): void {
   todayPlanWindow.once('ready-to-show', () => todayPlanWindow?.show());
   todayPlanWindow.on('close', () => { if (todayPlanWindow) store.set('todayPlanBounds', todayPlanWindow.getBounds()); });
   todayPlanWindow.on('closed', () => { todayPlanWindow = null; });
+}
+
+function createTimerStatsWindow(): void {
+  if (timerStatsWindow) { timerStatsWindow.show(); timerStatsWindow.focus(); return; }
+  timerStatsWindow = new BrowserWindow({
+    width: 700, height: 550,
+    frame: false, resizable: true, movable: true,
+    title: '暮雨笺 · 任务统计',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+    show: false,
+  });
+  const rendererPath = path.join(__dirname, '../renderer/index.html');
+  if (fs.existsSync(rendererPath)) timerStatsWindow.loadFile(rendererPath, { hash: '/timer-stats' });
+  else timerStatsWindow.loadURL('http://localhost:5173#/timer-stats');
+  timerStatsWindow.once('ready-to-show', () => timerStatsWindow?.show());
+  timerStatsWindow.on('closed', () => { timerStatsWindow = null; });
 }
 
 function setupIPC(): void {
@@ -297,6 +338,10 @@ function setupIPC(): void {
     }
   });
   ipcMain.handle('get-opacity', () => store.get('todayPlanOpacity') ?? 1);
+
+  ipcMain.on('toggle-timer-stats-window', createTimerStatsWindow);
+  ipcMain.on('close-timer-stats-window', () => timerStatsWindow?.close());
+  ipcMain.on('minimize-timer-stats-window', () => timerStatsWindow?.minimize());
 
   const notesPath = path.join(dataDir, 'notes.json');
   const notifyAllReload = () => {
@@ -457,6 +502,46 @@ function setupIPC(): void {
       try { fs.unlinkSync(tmpInput); } catch {}
       try { fs.unlinkSync(tmpOutput); } catch {}
     }
+  });
+
+  // 任务计时记录
+  const timerRecordsPath = path.join(dataDir, 'task-timer-records.json');
+
+  ipcMain.handle('save-timer-record', (_e: any, record: any) => {
+    try {
+      let data: any = { records: [] };
+      try { if (fs.existsSync(timerRecordsPath)) data = JSON.parse(fs.readFileSync(timerRecordsPath, 'utf-8')); } catch {}
+      if (!data.records) data.records = [];
+      data.records.push(record);
+      if (data.records.length > 1000) data.records = data.records.slice(-1000);
+      fs.writeFileSync(timerRecordsPath, JSON.stringify(data, null, 2), 'utf-8');
+      return { success: true };
+    } catch (err: any) { return { success: false, error: err.message }; }
+  });
+
+  ipcMain.handle('get-timer-records', () => {
+    try { if (fs.existsSync(timerRecordsPath)) return fs.readFileSync(timerRecordsPath, 'utf-8'); } catch {}
+    return '{"records":[]}';
+  });
+
+  ipcMain.handle('save-active-session', (_e: any, session: any) => {
+    try {
+      let data: any = { records: [] };
+      try { if (fs.existsSync(timerRecordsPath)) data = JSON.parse(fs.readFileSync(timerRecordsPath, 'utf-8')); } catch {}
+      data.activeSession = session || undefined;
+      fs.writeFileSync(timerRecordsPath, JSON.stringify(data, null, 2), 'utf-8');
+      return { success: true };
+    } catch (err: any) { return { success: false, error: err.message }; }
+  });
+
+  ipcMain.handle('load-active-session', () => {
+    try {
+      if (fs.existsSync(timerRecordsPath)) {
+        const data = JSON.parse(fs.readFileSync(timerRecordsPath, 'utf-8'));
+        return data.activeSession || null;
+      }
+    } catch {}
+    return null;
   });
 }
 

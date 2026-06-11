@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useNoteStore } from '../store/noteStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { renderMarkdown, toggleTaskCheckbox } from '../utils/markdown';
+import { renderMarkdown, toggleTaskCheckbox, postProcessPandocHtml } from '../utils/markdown';
 
 type SourceFormat = 'auto' | 'markdown' | 'latex' | 'rst' | 'html';
 
@@ -36,6 +36,7 @@ export const Preview: React.FC = () => {
   const [sourceFormat, setSourceFormat] = useState<SourceFormat>('auto');
   const compileIdRef = useRef(0);
   const contentRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!activeNote) { setHtml(''); return; }
@@ -43,7 +44,8 @@ export const Preview: React.FC = () => {
     const content = activeNote.content;
     const id = ++compileIdRef.current;
 
-    // 判断是否需要 Pandoc
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+
     const usePandoc = sourceFormat === 'latex' || sourceFormat === 'rst' || sourceFormat === 'html'
       || (sourceFormat === 'auto' && isLatexDocument(content));
 
@@ -54,7 +56,7 @@ export const Preview: React.FC = () => {
       window.electronAPI.pandocCompile(source, pandocFormat).then((result) => {
         if (compileIdRef.current !== id) return;
         if (result.success && result.html) {
-          setHtml(result.html);
+          setHtml(postProcessPandocHtml(result.html));
         } else {
           setHtml(renderMarkdown(content));
         }
@@ -65,28 +67,21 @@ export const Preview: React.FC = () => {
         setCompiling(false);
       });
     } else {
-      setHtml(renderMarkdown(content));
+      debounceRef.current = setTimeout(() => {
+        if (compileIdRef.current !== id) return;
+        setHtml(renderMarkdown(content));
+      }, 150);
     }
-  }, [activeNote?.content, activeNoteId, sourceFormat]);
 
-  // MathJax 渲染：每次 HTML 更新后触发 MathJax 处理公式
-  useEffect(() => {
-    if (!html) return;
-    // 等待 DOM 更新后再触发 MathJax
-    requestAnimationFrame(() => {
-      if (window.MathJax && window.MathJax.typesetPromise) {
-        const el = contentRef.current;
-        if (el) {
-          window.MathJax.typesetPromise([el]).catch(() => {});
-        }
-      }
-    });
-  }, [html]);
+    return () => { if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; } };
+  }, [activeNote?.content, activeNoteId, sourceFormat]);
 
   const handleContentClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!activeNote || !activeNoteId) return;
       const target = e.target as HTMLElement;
+
+      // 任务勾选
       if (target.tagName === 'INPUT' && target.getAttribute('type') === 'checkbox') {
         const li = target.closest('li');
         if (!li) return;
@@ -104,6 +99,21 @@ export const Preview: React.FC = () => {
         if (lineIndex >= 0) {
           const isChecked = (target as HTMLInputElement).checked;
           updateNote(activeNoteId, { content: toggleTaskCheckbox(activeNote.content, lineIndex, isChecked) });
+        }
+        return;
+      }
+
+      // Wiki 链接跳转
+      const wikiLink = target.closest('.wiki-link') as HTMLElement;
+      if (wikiLink) {
+        e.preventDefault();
+        const title = wikiLink.dataset.title;
+        if (title) {
+          const allNotes = useNoteStore.getState().notes;
+          const matched = allNotes.find(n => !n.isDeleted && n.title.toLowerCase().includes(title.toLowerCase()));
+          if (matched) {
+            useNoteStore.getState().setActiveNoteId(matched.id);
+          }
         }
       }
     }, [activeNote, activeNoteId, updateNote]);
@@ -182,8 +192,12 @@ export const Preview: React.FC = () => {
       </div>
       {/* 预览内容 */}
       <div ref={contentRef}
-        className="flex-1 overflow-auto p-6 prose prose-sm dark:prose-invert max-w-none prose-headings:text-gray-800 dark:prose-headings:text-gray-100 prose-p:text-gray-600 dark:prose-p:text-gray-300 prose-a:text-indigo-500 prose-code:text-indigo-600 dark:prose-code:text-indigo-400 prose-pre:bg-gray-100 dark:prose-pre:bg-gray-800/80"
+        className="flex-1 overflow-auto p-6 prose prose-sm dark:prose-invert max-w-none break-words prose-headings:text-gray-800 dark:prose-headings:text-gray-100 prose-p:text-gray-600 dark:prose-p:text-gray-300 prose-a:text-indigo-500 prose-code:text-indigo-600 dark:prose-code:text-indigo-400 prose-pre:bg-gray-100 dark:prose-pre:bg-gray-800/80"
         onClick={handleContentClick} dangerouslySetInnerHTML={{ __html: html }} />
+      <style>{`
+        .wiki-link { color: #6366f1; text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 2px; cursor: pointer; transition: color 0.15s; }
+        .wiki-link:hover { color: #ec4899; }
+      `}</style>
     </div>
   );
 };

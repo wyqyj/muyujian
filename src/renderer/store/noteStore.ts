@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+export type NoteType = 'note' | 'todo';
+
 export interface Note {
   id: string;
   title: string;
@@ -9,41 +11,46 @@ export interface Note {
   updatedAt: number;
   deadline?: number;
   isTodayPlan: boolean;
+  noteType: NoteType;
   isArchived: boolean;
+  isPinned?: boolean;
+  pinnedInTags?: string[];
+  isDeleted?: boolean;
+  deletedAt?: number;
 }
 
 interface NoteStore {
   notes: Note[];
   activeNoteId: string | null;
-  searchQuery: string;
-  filterTag: string | null;
-  showTodayPlan: boolean;
   loaded: boolean;
 
   setNotes: (notes: Note[]) => void;
   addNote: (note: Note) => void;
+  updateContent: (id: string, content: string) => void;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
+  restoreNote: (id: string) => void;
+  permanentDelete: (id: string) => void;
+  emptyTrash: () => void;
   archiveNote: (id: string) => void;
+  togglePin: (id: string) => void;
+  togglePinInTag: (id: string, tag: string) => void;
   setActiveNoteId: (id: string | null) => void;
-  setSearchQuery: (query: string) => void;
-  setFilterTag: (tag: string | null) => void;
-  setShowTodayPlan: (show: boolean) => void;
   loadNotes: () => Promise<void>;
+  getTodoNotes: () => Note[];
   getTodayPlanNotes: () => Note[];
   selectNote: (id: string) => void;
 }
 
-// 防抖保存（带脏检查，防止 reload→save 循环）
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSavedJson = '';
 let reloading = false;
 function saveToDisk(notes: Note[]): void {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    if (reloading) return; // 正在从磁盘重载，跳过保存防止覆盖
+    if (reloading) return;
     const json = JSON.stringify(notes, null, 2);
-    if (json === lastSavedJson) return; // 数据未变化，跳过保存
+    if (json === lastSavedJson) return;
     lastSavedJson = json;
     if (window.electronAPI) {
       window.electronAPI.saveNotes(json);
@@ -53,7 +60,6 @@ function saveToDisk(notes: Note[]): void {
   }, 300);
 }
 
-/** 校验笔记数据结构 */
 export function validateNotes(data: any[]): Note[] {
   if (!Array.isArray(data)) return [];
   return data.filter((n): n is Note =>
@@ -64,9 +70,6 @@ export function validateNotes(data: any[]): Note[] {
 export const useNoteStore = create<NoteStore>((set, get) => ({
   notes: [],
   activeNoteId: null,
-  searchQuery: '',
-  filterTag: null,
-  showTodayPlan: false,
   loaded: false,
 
   loadNotes: async () => {
@@ -83,7 +86,24 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
         notes = data ? validateNotes(JSON.parse(data)) : [];
       } catch { notes = []; }
     }
-    lastSavedJson = JSON.stringify(notes, null, 2);
+    // 自动迁移：isTodayPlan → noteType
+    let migrated = false;
+    notes = notes.map(n => {
+      if (n.isTodayPlan && !n.noteType) {
+        migrated = true;
+        return { ...n, noteType: 'todo' as const };
+      }
+      if (!n.noteType) {
+        return { ...n, noteType: 'note' as const };
+      }
+      return n;
+    });
+    if (migrated) {
+      lastSavedJson = JSON.stringify(notes, null, 2);
+      if (window.electronAPI) window.electronAPI.saveNotes(lastSavedJson);
+    } else {
+      lastSavedJson = JSON.stringify(notes, null, 2);
+    }
     set({ notes, loaded: true });
   },
 
@@ -95,6 +115,18 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     saveToDisk(updated);
   },
 
+  updateContent: (id, content) => {
+    const notes = get().notes;
+    const idx = notes.findIndex((n) => n.id === id);
+    if (idx === -1) return;
+    const note = notes[idx];
+    if (note.content === content) return;
+    const updated = [...notes];
+    updated[idx] = { ...note, content, updatedAt: Date.now() };
+    set({ notes: updated });
+    saveToDisk(updated);
+  },
+
   updateNote: (id, updates) => {
     const updated = get().notes.map((n) => n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n);
     set({ notes: updated });
@@ -102,8 +134,23 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   },
 
   deleteNote: (id) => {
+    get().updateNote(id, { isDeleted: true, deletedAt: Date.now() });
+    if (get().activeNoteId === id) set({ activeNoteId: null });
+  },
+
+  restoreNote: (id) => {
+    get().updateNote(id, { isDeleted: false, deletedAt: undefined });
+  },
+
+  permanentDelete: (id) => {
     const updated = get().notes.filter((n) => n.id !== id);
     set({ notes: updated, activeNoteId: get().activeNoteId === id ? null : get().activeNoteId });
+    saveToDisk(updated);
+  },
+
+  emptyTrash: () => {
+    const updated = get().notes.filter((n) => !n.isDeleted);
+    set({ notes: updated, activeNoteId: null });
     saveToDisk(updated);
   },
 
@@ -112,25 +159,39 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     if (note) get().updateNote(id, { isArchived: !note.isArchived });
   },
 
-  setActiveNoteId: (id) => set({ activeNoteId: id }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
-  setFilterTag: (tag) => set({ filterTag: tag }),
-  setShowTodayPlan: (show) => set({ showTodayPlan: show }),
+  togglePin: (id) => {
+    const note = get().notes.find((n) => n.id === id);
+    if (!note) return;
+    const newPinned = !note.isPinned;
+    get().updateNote(id, { isPinned: newPinned });
+  },
 
-  getTodayPlanNotes: () => get().notes.filter((n) => n.isTodayPlan && !n.isArchived),
+  togglePinInTag: (id, tag) => {
+    const note = get().notes.find((n) => n.id === id);
+    if (!note) return;
+    const current = note.pinnedInTags || [];
+    const next = current.includes(tag)
+      ? current.filter(t => t !== tag)
+      : [...current, tag];
+    get().updateNote(id, { pinnedInTags: next });
+  },
+
+  setActiveNoteId: (id) => set({ activeNoteId: id }),
+
+  getTodoNotes: () => get().notes.filter((n) => (n.noteType === 'todo' || n.isTodayPlan) && !n.isArchived),
+
+  getTodayPlanNotes: () => get().notes.filter((n) => (n.noteType === 'todo' || n.isTodayPlan) && !n.isArchived),
 
   selectNote: (id) => {
     const exists = get().notes.some((n) => n.id === id);
-    if (exists) set({ activeNoteId: id, showTodayPlan: false });
+    if (exists) set({ activeNoteId: id });
   },
 }));
 
-// 注册跨窗口笔记重载监听（延迟注册，避免被 Vite tree-shake）
 export function registerReloadListener(): void {
   if (!window.electronAPI?.onReloadNotes) return;
   window.electronAPI.onReloadNotes(async () => {
     if (!window.electronAPI) return;
-    // 取消待保存操作，防止覆盖从其他窗口写入的数据
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     reloading = true;
     try {
