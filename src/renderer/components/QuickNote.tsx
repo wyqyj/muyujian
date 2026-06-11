@@ -19,25 +19,18 @@ export const QuickNote: React.FC = () => {
   // 打开窗口时立即在主程序中创建便签
   useEffect(() => {
     const createNote = async () => {
-      console.log('[QuickNote] createNote called, electronAPI:', !!window.electronAPI, 'hash:', window.location.hash);
-      if (!window.electronAPI) { console.error('[QuickNote] electronAPI not available!'); return; }
+      if (!window.electronAPI) return;
       const now = new Date();
       const title = `随笔记 ${now.toLocaleDateString('zh-CN')} ${now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
       const noteJson = JSON.stringify({
         id: generateId(), title, content: '', tags: ['随笔记'],
         createdAt: Date.now(), updatedAt: Date.now(), isTodayPlan: false, noteType: 'note', isArchived: false,
       });
-      console.log('[QuickNote] calling createQuickNote...');
       const result = await window.electronAPI.createQuickNote(noteJson);
-      console.log('[QuickNote] result:', JSON.stringify(result));
       if (result.success && result.noteId) {
         noteIdRef.current = result.noteId;
         setNoteCreated(true);
-        // 通知主窗口选中新创建的便签
         window.electronAPI?.selectNote(result.noteId);
-        console.log('[QuickNote] note created successfully, id:', result.noteId);
-      } else {
-        console.error('[QuickNote] createQuickNote failed:', result.error);
       }
     };
     createNote();
