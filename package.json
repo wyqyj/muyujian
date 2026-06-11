@@ -1,6 +1,6 @@
 {
   "name": "muyujian",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "MuYuJian - Note taking app with Markdown and LaTeX support",
   "main": "dist/main/index.js",
   "scripts": {
